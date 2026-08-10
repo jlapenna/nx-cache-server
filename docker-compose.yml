@@ -1,6 +1,6 @@
 services:
   nx-cache-server:
-    build: .
+    build: ./apps/nx-cache-server
     image: nx-cache-server:latest
     ports:
       - '${NX_CACHE_PORT:-3000}:3000'

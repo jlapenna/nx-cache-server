@@ -12,6 +12,9 @@ Node test suite covers concurrent uploads, partial/aborted uploads, immutable
 publication, read-only credentials, token-map validation, and the optional
 integrity canary.
 
+The service is a first-class Nx application at `apps/nx-cache-server`; its
+source, tests, container definition, and project configuration live together.
+
 ## Quick start
 
 1. Copy the example environment file and replace the placeholder token:
@@ -144,7 +147,7 @@ With legacy scalar credentials, run it as:
 NX_CACHE_ACCESS_TOKEN='<write token>' \
 NX_CACHE_READ_ONLY_ACCESS_TOKEN='<read token>' \
 CACHE_URL=http://127.0.0.1:3000 \
-./canary.sh
+./apps/nx-cache-server/canary.sh
 ```
 
 In token-map mode, set `NX_CACHE_TOKENS_FILE` instead. The map must contain at
