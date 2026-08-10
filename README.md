@@ -6,8 +6,9 @@ content-addressed entries over Nx's native `GET` and `PUT /v1/cache/<hash>`
 protocol, so a shared cache does not require a commercial adapter or a custom
 task runner.
 
-The server has no `package.json` and no runtime dependencies. Its Node test
-suite covers concurrent uploads, partial/aborted uploads, immutable
+The server has no runtime dependencies. This repository is an Nx workspace:
+Nx manages and caches its lint, protocol-test, and container-build tasks. Its
+Node test suite covers concurrent uploads, partial/aborted uploads, immutable
 publication, read-only credentials, token-map validation, and the optional
 integrity canary.
 
@@ -37,6 +38,21 @@ integrity canary.
 The server stores cache data in the named Docker volume `nx-cache-data`.
 Set `NX_CACHE_PORT`, `MAX_CACHE_GB`, or `MAX_AGE_DAYS` in `.env` when the
 defaults do not fit the deployment.
+
+## Published image
+
+Image-relevant commits merged to `main` produce a multi-platform
+(`linux/amd64` and `linux/arm64`) image at
+`ghcr.io/jlapenna/nx-cache-server`. Releases stage an immutable commit tag,
+scan both platform images, then promote that exact manifest to `:latest`.
+Pull it directly when you do not need a local source build:
+
+```bash
+docker pull ghcr.io/jlapenna/nx-cache-server:latest
+```
+
+For a production deployment, pin the immutable commit tag or image digest
+instead of the moving `:latest` tag.
 
 ## Credentials
 
@@ -91,13 +107,30 @@ The server removes entries older than `MAX_AGE_DAYS`, then evicts least
 recently used entries until it is below `MAX_CACHE_GB`. A successful `GET`
 refreshes an entry's modification time.
 
-## Test
+## Development and test
 
-Run the dependency-free regression suite with Node 18 or newer:
+Use the Node version in [`.nvmrc`](.nvmrc) and install the locked development
+dependencies:
 
 ```bash
-node --test server.test.js
+npm ci
 ```
+
+Run the Nx-managed checks:
+
+```bash
+npm run verify
+```
+
+This runs the dependency-free regression suite with `nx test
+nx-cache-server`; a repeat run can use Nx's local task cache. Build a local
+container image with:
+
+```bash
+npx nx run nx-cache-server:container
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
 ## Optional integrity canary
 

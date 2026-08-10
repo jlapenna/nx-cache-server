@@ -1,0 +1,22 @@
+{
+  "name": "nx-cache-server",
+  "version": "0.1.0",
+  "description": "A small, dependency-free HTTP remote cache server for Nx.",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.16.0",
+  "scripts": {
+    "lint": "nx run nx-cache-server:lint",
+    "test": "nx run nx-cache-server:test",
+    "verify": "nx run-many -t lint,test --projects=nx-cache-server"
+  },
+  "devDependencies": {
+    "nx": "23.1.1"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.9"
+  }
+}

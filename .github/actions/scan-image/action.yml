@@ -1,0 +1,70 @@
+name: Scan published image
+description: Scan a staged registry image before it is promoted to a consumer tag.
+
+inputs:
+  image-ref:
+    description: Published image reference to scan.
+    required: true
+  platform:
+    description: Platform to resolve from a multi-platform manifest list.
+    required: true
+  category:
+    description: Unique code-scanning category for this image and platform.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Trivy resolves one arbitrary platform from a manifest list when it is
+    # given a tag directly. Resolve the requested platform's digest first so
+    # both published architectures are actually covered.
+    - name: Resolve ${{ inputs.platform }} digest
+      id: digest
+      shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.image-ref }}
+        PLATFORM: ${{ inputs.platform }}
+      run: |
+        set -euo pipefail
+        os="${PLATFORM%%/*}"
+        arch="${PLATFORM#*/}"
+        digest="$(docker buildx imagetools inspect "$IMAGE_REF" --raw \
+          | jq -r --arg os "$os" --arg arch "$arch" \
+              '.manifests[] | select(.platform.os == $os and .platform.architecture == $arch) | .digest')"
+        if [ -z "$digest" ]; then
+          echo "::error::no $PLATFORM manifest found in $IMAGE_REF"
+          exit 1
+        fi
+        repo="${IMAGE_REF%:*}"
+        echo "ref=${repo}@${digest}" >> "$GITHUB_OUTPUT"
+
+    # Upload first so findings remain visible in code scanning even when the
+    # enforceable gate below rejects the staged image.
+    - name: Scan image for code scanning
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        image-ref: ${{ steps.digest.outputs.ref }}
+        format: sarif
+        output: trivy-results-${{ inputs.category }}.sarif
+        severity: CRITICAL
+        ignore-unfixed: true
+
+    - name: Upload image scan results
+      if: always()
+      uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+      with:
+        sarif_file: trivy-results-${{ inputs.category }}.sarif
+        category: ${{ inputs.category }}
+
+    # Only vulnerabilities with an available fix block promotion. This keeps
+    # a non-actionable base-image finding visible without making the public
+    # release pipeline permanently red.
+    - name: Fail on fixable CRITICAL vulnerabilities
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        image-ref: ${{ steps.digest.outputs.ref }}
+        format: table
+        severity: CRITICAL
+        ignore-unfixed: true
+        exit-code: '1'
+        skip-setup-trivy: true

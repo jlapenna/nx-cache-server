@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/nx/schemas/project-schema.json",
+  "name": "nx-cache-server",
+  "projectType": "application",
+  "sourceRoot": ".",
+  "targets": {
+    "lint": {
+      "command": "node --check server.js && bash -n canary.sh"
+    },
+    "test": {
+      "command": "node --test server.test.js"
+    },
+    "container": {
+      "command": "docker build --tag nx-cache-server:local .",
+      "cache": false
+    }
+  }
+}
