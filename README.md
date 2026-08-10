@@ -39,6 +39,21 @@ The server stores cache data in the named Docker volume `nx-cache-data`.
 Set `NX_CACHE_PORT`, `MAX_CACHE_GB`, or `MAX_AGE_DAYS` in `.env` when the
 defaults do not fit the deployment.
 
+## Published image
+
+Image-relevant commits merged to `main` produce a multi-platform
+(`linux/amd64` and `linux/arm64`) image at
+`ghcr.io/jlapenna/nx-cache-server`. Releases stage an immutable commit tag,
+scan both platform images, then promote that exact manifest to `:latest`.
+Pull it directly when you do not need a local source build:
+
+```bash
+docker pull ghcr.io/jlapenna/nx-cache-server:latest
+```
+
+For a production deployment, pin the immutable commit tag or image digest
+instead of the moving `:latest` tag.
+
 ## Credentials
 
 ### Legacy scalar tokens
