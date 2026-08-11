@@ -52,7 +52,9 @@ for an independent deployment:
 docker build -t nx-cache-server:local apps/nx-cache-server
 ```
 
-The homelab's own deployment consumes its separately published internal image.
+The homelab publishes and consumes its own internal image through its
+canonical, in-lab BuildKit publisher. This repository never publishes to a
+public container registry and holds no publishing credentials.
 
 ## Credentials
 
