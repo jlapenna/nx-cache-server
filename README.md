@@ -97,6 +97,7 @@ Every cache request uses `Authorization: Bearer <token>`.
 | Request | Result |
 | --- | --- |
 | `GET /healthz` | unauthenticated `200` liveness response |
+| `GET` or `HEAD /metrics` | unauthenticated Prometheus text exposition |
 | `GET` or `HEAD /v1/cache/<hash>` | `200`, `404`, or `403` |
 | `PUT /v1/cache/<hash>` | `200` stored, `409` already present, or `403` for a read-only credential |
 
@@ -108,6 +109,17 @@ filesystem must support hard links.
 The server removes entries older than `MAX_AGE_DAYS`, then evicts least
 recently used entries until it is below `MAX_CACHE_GB`. A successful `GET`
 refreshes an entry's modification time.
+
+## Prometheus metrics
+
+`GET /metrics` is an unauthenticated Prometheus scrape endpoint. It exposes
+low-cardinality HTTP result and latency metrics, published-cache entry/byte
+gauges, prune eviction/error counters, and the server start time. Cache hashes,
+paths, token names, and token values are never emitted as metric labels.
+
+The included homelab configuration scrapes
+`spark.lan.jlapenna.net:3123/metrics` every 15 seconds with the
+`nx-cache-server` job.
 
 ## Development and test
 
