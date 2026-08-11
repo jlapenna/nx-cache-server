@@ -6,7 +6,10 @@ FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a5
 # so it cannot add an unused vulnerability surface to the published artifact.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
-COPY server.js /app/server.js
+# The canonical publisher intentionally creates its temporary source checkout
+# with a private umask.  Make the runtime user the owner so that checkout mode
+# cannot make the application unreadable once the image switches to `node`.
+COPY --chown=node:node server.js /app/server.js
 
 USER node
 EXPOSE 3000
