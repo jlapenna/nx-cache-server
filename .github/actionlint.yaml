@@ -1,6 +1,0 @@
-# The image publisher is deliberately pinned to its dedicated socketless
-# build-client lane. Declare that custom self-hosted label so actionlint keeps
-# catching accidental runner-label changes in the trusted publish workflow.
-self-hosted-runner:
-  labels:
-    - nx-cache-server-build-client
