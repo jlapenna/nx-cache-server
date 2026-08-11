@@ -16,7 +16,8 @@
 // oldest-first until the total is under MAX_CACHE_GB. GET refreshes an entry's
 // mtime so hot entries survive pruning. No dependencies; state is fully
 // derivable (a lost cache only costs recomputation), so the data needs no
-// backup.
+// backup. Prometheus can scrape unauthenticated, low-cardinality operational
+// metrics at GET /metrics; cache hashes and credential names are never labels.
 
 const http = require('http');
 const fs = require('fs');
@@ -36,6 +37,132 @@ const PRUNE_INTERVAL_MS = Number(
 
 // Hashes are hex/word characters; anything else is a traversal attempt.
 const HASH_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const PROMETHEUS_CONTENT_TYPE = 'text/plain; version=0.0.4; charset=utf-8';
+const REQUEST_DURATION_BUCKETS = [
+  0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10,
+];
+const processStartedAtSeconds = Date.now() / 1000;
+
+// The server deliberately has no runtime dependencies, including a Prometheus
+// client. Keep these metrics to bounded label sets: arbitrary cache hashes,
+// request paths, and credential names would make Prometheus cardinality grow
+// without limit.
+const metrics = {
+  cacheBytes: 0,
+  cacheEntries: 0,
+  cacheEvictions: { age: 0, capacity: 0 },
+  httpRequests: new Map(),
+  httpRequestDurations: new Map(),
+  inFlightRequests: 0,
+  pruneErrors: 0,
+};
+
+function prometheusMethod(method) {
+  return ['GET', 'HEAD', 'PUT'].includes(method) ? method : 'OTHER';
+}
+
+function prometheusLabels(labels) {
+  const entries = Object.entries(labels);
+  if (entries.length === 0) return '';
+  return `{${entries
+    .map(([name, value]) => {
+      const escaped = String(value)
+        .replaceAll('\\', '\\\\')
+        .replaceAll('\n', '\\n')
+        .replaceAll('"', '\\"');
+      return `${name}="${escaped}"`;
+    })
+    .join(',')}}`;
+}
+
+function recordRequestMetrics(req, res, result, durationSeconds) {
+  metrics.inFlightRequests = Math.max(0, metrics.inFlightRequests - 1);
+
+  const method = prometheusMethod(req.method);
+  const status = String(res.statusCode);
+  const requestKey = `${method}\0${result}\0${status}`;
+  metrics.httpRequests.set(
+    requestKey,
+    (metrics.httpRequests.get(requestKey) || 0) + 1,
+  );
+
+  const durationKey = `${method}\0${status}`;
+  let duration = metrics.httpRequestDurations.get(durationKey);
+  if (!duration) {
+    duration = {
+      buckets: REQUEST_DURATION_BUCKETS.map(() => 0),
+      count: 0,
+      sum: 0,
+    };
+    metrics.httpRequestDurations.set(durationKey, duration);
+  }
+  duration.count += 1;
+  duration.sum += durationSeconds;
+  for (const [index, bucket] of REQUEST_DURATION_BUCKETS.entries()) {
+    if (durationSeconds <= bucket) duration.buckets[index] += 1;
+  }
+}
+
+function renderPrometheusMetrics() {
+  const lines = [
+    '# HELP nx_cache_server_process_start_time_seconds Unix time when the server started.',
+    '# TYPE nx_cache_server_process_start_time_seconds gauge',
+    `nx_cache_server_process_start_time_seconds ${processStartedAtSeconds}`,
+    '# HELP nx_cache_server_http_requests_in_flight Current HTTP requests being handled.',
+    '# TYPE nx_cache_server_http_requests_in_flight gauge',
+    `nx_cache_server_http_requests_in_flight ${metrics.inFlightRequests}`,
+    '# HELP nx_cache_server_http_requests_total Completed HTTP requests by method, result, and status.',
+    '# TYPE nx_cache_server_http_requests_total counter',
+  ];
+  for (const [key, count] of [...metrics.httpRequests.entries()].sort()) {
+    const [method, result, status] = key.split('\0');
+    lines.push(
+      `nx_cache_server_http_requests_total${prometheusLabels({ method, result, status })} ${count}`,
+    );
+  }
+
+  lines.push(
+    '# HELP nx_cache_server_http_request_duration_seconds Completed HTTP request duration in seconds.',
+    '# TYPE nx_cache_server_http_request_duration_seconds histogram',
+  );
+  for (const [key, duration] of [
+    ...metrics.httpRequestDurations.entries(),
+  ].sort()) {
+    const [method, status] = key.split('\0');
+    for (const [index, bucket] of REQUEST_DURATION_BUCKETS.entries()) {
+      lines.push(
+        `nx_cache_server_http_request_duration_seconds_bucket${prometheusLabels({ le: bucket, method, status })} ${duration.buckets[index]}`,
+      );
+    }
+    lines.push(
+      `nx_cache_server_http_request_duration_seconds_bucket${prometheusLabels({ le: '+Inf', method, status })} ${duration.count}`,
+      `nx_cache_server_http_request_duration_seconds_sum${prometheusLabels({ method, status })} ${duration.sum}`,
+      `nx_cache_server_http_request_duration_seconds_count${prometheusLabels({ method, status })} ${duration.count}`,
+    );
+  }
+
+  lines.push(
+    '# HELP nx_cache_server_cache_entries Number of published cache entries.',
+    '# TYPE nx_cache_server_cache_entries gauge',
+    `nx_cache_server_cache_entries ${metrics.cacheEntries}`,
+    '# HELP nx_cache_server_cache_size_bytes Total size of published cache entries in bytes.',
+    '# TYPE nx_cache_server_cache_size_bytes gauge',
+    `nx_cache_server_cache_size_bytes ${metrics.cacheBytes}`,
+    '# HELP nx_cache_server_cache_evictions_total Cache entries removed by pruning.',
+    '# TYPE nx_cache_server_cache_evictions_total counter',
+  );
+  for (const reason of ['age', 'capacity']) {
+    lines.push(
+      `nx_cache_server_cache_evictions_total${prometheusLabels({ reason })} ${metrics.cacheEvictions[reason]}`,
+    );
+  }
+  lines.push(
+    '# HELP nx_cache_server_cache_prune_errors_total Cache pruning errors.',
+    '# TYPE nx_cache_server_cache_prune_errors_total counter',
+    `nx_cache_server_cache_prune_errors_total ${metrics.pruneErrors}`,
+  );
+  return `${lines.join('\n')}\n`;
+}
 
 function log(event, fields = {}, level = 'info') {
   const line = JSON.stringify({
@@ -183,6 +310,7 @@ function prune() {
       })
       .filter(Boolean);
   } catch (error) {
+    metrics.pruneErrors += 1;
     log('cache_prune_error', { error: error.message }, 'error');
     return;
   }
@@ -199,6 +327,7 @@ function prune() {
         fs.unlinkSync(entryPath(entry.hash));
         ageEvictions += 1;
       } catch {
+        metrics.pruneErrors += 1;
         kept.push(entry);
         total += entry.size;
       }
@@ -217,9 +346,16 @@ function prune() {
         fs.unlinkSync(entryPath(entry.hash));
         total -= entry.size;
         capacityEvictions += 1;
-      } catch {}
+      } catch {
+        metrics.pruneErrors += 1;
+      }
     }
   }
+
+  metrics.cacheEntries = entries.length - ageEvictions - capacityEvictions;
+  metrics.cacheBytes = total;
+  metrics.cacheEvictions.age += ageEvictions;
+  metrics.cacheEvictions.capacity += capacityEvictions;
 
   log('cache_prune', {
     retainedCount: entries.length - ageEvictions - capacityEvictions,
@@ -231,6 +367,7 @@ function prune() {
 
 const server = http.createServer((req, res) => {
   const startedAt = process.hrtime.bigint();
+  metrics.inFlightRequests += 1;
   let hash = null;
   let result = 'unknown';
   let sizeBytes = 0;
@@ -240,6 +377,8 @@ const server = http.createServer((req, res) => {
   const logAccess = () => {
     if (logged) return;
     logged = true;
+    const elapsedNs = process.hrtime.bigint() - startedAt;
+    recordRequestMetrics(req, res, result, Number(elapsedNs) / 1_000_000_000);
     log('cache_request', {
       method: req.method,
       path: req.url,
@@ -249,7 +388,7 @@ const server = http.createServer((req, res) => {
       sizeBytes,
       ...(tokenName && { tokenName }),
       durationMs: Number(
-        (Number(process.hrtime.bigint() - startedAt) / 1_000_000).toFixed(3),
+        (Number(elapsedNs) / 1_000_000).toFixed(3),
       ),
     });
   };
@@ -260,6 +399,24 @@ const server = http.createServer((req, res) => {
       logAccess();
     }
   });
+
+  // Metrics are intentionally unauthenticated so the Prometheus server on the
+  // management network can scrape the endpoint. They include no hashes,
+  // tokens, paths, or other unbounded labels.
+  if (
+    req.url === '/metrics' &&
+    (req.method === 'GET' || req.method === 'HEAD')
+  ) {
+    result = 'metrics';
+    const body = renderPrometheusMetrics();
+    res.writeHead(200, {
+      'cache-control': 'no-store',
+      'content-length': Buffer.byteLength(body),
+      'content-type': PROMETHEUS_CONTENT_TYPE,
+    });
+    res.end(req.method === 'HEAD' ? undefined : body);
+    return;
+  }
 
   // Unauthenticated liveness probe for monitoring.
   if (req.method === 'GET' && req.url === '/healthz') {
@@ -391,6 +548,8 @@ const server = http.createServer((req, res) => {
           res.writeHead(409).end();
         } else {
           result = 'stored';
+          metrics.cacheEntries += 1;
+          metrics.cacheBytes += sizeBytes;
           // Nx 23.1.0 accepts 200, 409, and 403 from store(); 202 is treated
           // as a misconfigured remote-cache endpoint.
           res.writeHead(200).end();

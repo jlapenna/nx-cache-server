@@ -70,6 +70,10 @@ function cacheUrl(hash) {
   return `http://127.0.0.1:${port}/v1/cache/${hash}`;
 }
 
+function serverUrl(pathname) {
+  return `http://127.0.0.1:${port}${pathname}`;
+}
+
 function startPut(hash, token = WRITE_TOKEN) {
   let resolveResponse;
   let rejectResponse;
@@ -432,6 +436,50 @@ test('access logs contain cache result, hash, size, and duration', async () => {
   assert.ok(record.durationMs >= 0);
   assert.equal(JSON.stringify(record).includes(WRITE_TOKEN), false);
   assert.equal('tokenName' in record, false);
+});
+
+test('Prometheus metrics expose cache outcomes without credentials', async () => {
+  const write = await fetch(cacheUrl('prometheus-metric-entry'), {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${WRITE_TOKEN}` },
+    body: '12345',
+  });
+  assert.equal(write.status, 200);
+  assert.deepEqual(await get('prometheus-metric-entry'), {
+    status: 200,
+    body: '12345',
+  });
+
+  const response = await fetch(serverUrl('/metrics'));
+  assert.equal(response.status, 200);
+  assert.match(
+    response.headers.get('content-type'),
+    /^text\/plain; version=0\.0\.4/,
+  );
+  const body = await response.text();
+  assert.match(
+    body,
+    /^nx_cache_server_process_start_time_seconds \d+(?:\.\d+)?$/m,
+  );
+  assert.match(
+    body,
+    /^nx_cache_server_http_requests_total\{method="PUT",result="stored",status="200"\} 1$/m,
+  );
+  assert.match(
+    body,
+    /^nx_cache_server_http_requests_total\{method="GET",result="hit",status="200"\} 1$/m,
+  );
+  assert.match(
+    body,
+    /^nx_cache_server_http_request_duration_seconds_bucket\{le="\+Inf",method="PUT",status="200"\} 1$/m,
+  );
+  assert.match(body, /^nx_cache_server_cache_entries 1$/m);
+  assert.match(body, /^nx_cache_server_cache_size_bytes 5$/m);
+  assert.match(
+    body,
+    /^nx_cache_server_cache_evictions_total\{reason="age"\} 0$/m,
+  );
+  assert.doesNotMatch(body, /write-token|prometheus-metric-entry/);
 });
 
 test('parseTokenMap: rejects invalid JSON', () => {
