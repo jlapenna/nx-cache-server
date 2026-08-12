@@ -9,11 +9,13 @@
   },
   "packageManager": "npm@11.16.0",
   "scripts": {
+    "prepare": "husky",
     "lint": "nx run nx-cache-server:lint",
     "test": "nx run nx-cache-server:test",
     "verify": "nx run-many -t lint,test --projects=nx-cache-server"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
     "nx": "23.1.1"
   },
   "overrides": {
