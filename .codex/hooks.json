@@ -1,0 +1,17 @@
+{
+  "description": "Repository workflow reminders for agent sessions.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/codex-issue-guardrail.cjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
