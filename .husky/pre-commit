@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+./tools/require-feature-worktree.sh
+npx nx run nx-cache-server:lint

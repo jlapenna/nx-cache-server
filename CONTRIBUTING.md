@@ -2,11 +2,15 @@
 
 ## Development
 
+The primary checkout is reserved for a clean `main`. Create a linked feature
+worktree for edits, then run `./tools/setup-worktree.sh` there. Use
+`./tools/setup-repo.sh` only when initializing the primary checkout.
+
 Use the Node version in [`.nvmrc`](.nvmrc), then install the locked
 development dependencies:
 
 ```bash
-npm ci
+./tools/setup-repo.sh
 ```
 
 Run the Nx-managed checks before opening a pull request:

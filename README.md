@@ -124,10 +124,10 @@ The included homelab configuration scrapes
 ## Development and test
 
 Use the Node version in [`.nvmrc`](.nvmrc) and install the locked development
-dependencies:
+dependencies and local Git hooks:
 
 ```bash
-npm ci
+./tools/setup-repo.sh
 ```
 
 Run the Nx-managed checks:
