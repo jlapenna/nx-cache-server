@@ -141,9 +141,10 @@ Before running `git worktree remove`, work through this checklist — a
    scripts/safe-remove-worktree.sh <worktree-path> --force-anyway
    scripts/safe-remove-worktree.sh <worktree-path> --git-dir <owner> --force-anyway --dry-run
    ```
-   That recovery prunes Git's stale worktree record and removes the exact
-   orphaned directory, so use it only after checking its contents and live
-   processes.
+   That recovery identifies only the target's administrative record, restores
+   its missing `.git` link, and asks `git worktree remove` to remove that
+   exact checkout. It never runs repository-wide `git worktree prune`, so
+   unrelated stale worktree records remain recoverable.
 6. **Orphaned directories** (no `.git/worktrees/<name>/` admin entry, `git
    worktree list` doesn't mention them, but the directory is still on
    disk — usually a prior `git worktree remove` that partially failed) are
