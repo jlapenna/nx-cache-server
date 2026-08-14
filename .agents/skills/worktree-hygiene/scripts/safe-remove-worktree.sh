@@ -169,21 +169,35 @@ if [ "$GIT_DIR" = "$GIT_COMMON_DIR" ]; then
     echo "DRY RUN: git --git-dir=\"$GIT_COMMON_DIR\" worktree remove \"$WT_ABS\" --force"
     exit 0
   fi
-  repair_file=$(mktemp "$WT_ABS/.git.repair.XXXXXX") || {
-    echo "REFUSING: could not create a private repair file under $WT_ABS." >&2
-    exit 4
-  }
-  if ! printf 'gitdir: %s\n' "$WORKTREE_ADMIN_DIR" >"$repair_file"; then
-    unlink "$repair_file"
-    echo "REFUSING: could not write the private repair file." >&2
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "REFUSING: python3 is required for exclusive no-follow Git-link recovery." >&2
     exit 4
   fi
-  if ! ln -- "$repair_file" "$WT_ABS/.git"; then
-    unlink "$repair_file"
+  if ! python3 - "$WT_ABS/.git" "$WORKTREE_ADMIN_DIR" <<'PY'
+import os
+import sys
+
+path, admin_dir = sys.argv[1:]
+flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+try:
+    fd = os.open(path, flags, 0o600)
+    data = f"gitdir: {admin_dir}\n".encode()
+    while data:
+        written = os.write(fd, data)
+        data = data[written:]
+    os.close(fd)
+except OSError as error:
+    try:
+        os.close(fd)
+    except (NameError, OSError):
+        pass
+    print(f"exclusive Git-link creation failed: {error}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+  then
     echo "REFUSING: could not create $WT_ABS/.git atomically; nothing was overwritten." >&2
     exit 4
   fi
-  unlink "$repair_file"
   if ! git --git-dir="$GIT_COMMON_DIR" worktree remove "$WT_ABS" --force; then
     echo "ERROR: exact worktree removal failed after restoring $WT_ABS/.git." >&2
     echo "The Git link is repaired; inspect the worktree and rerun normal removal." >&2
