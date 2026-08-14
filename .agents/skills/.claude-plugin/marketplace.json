@@ -14,7 +14,8 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./nx-cache-server-dev"
+        "./nx-cache-server-dev",
+        "./worktree-hygiene"
       ]
     }
   ]
