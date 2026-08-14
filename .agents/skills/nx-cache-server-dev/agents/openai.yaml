@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nx Cache Server Dev"
+  short_description: "Develop and land nx-cache-server changes safely"
+  default_prompt: "Use $nx-cache-server-dev to implement, verify, and land this nx-cache-server change."
