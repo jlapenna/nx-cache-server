@@ -145,9 +145,10 @@ Before running `git worktree remove`, work through this checklist — a
    its missing `.git` link, and asks `git worktree remove` to remove that
    exact checkout. It never runs repository-wide `git worktree prune`, so
    unrelated stale worktree records remain recoverable. Recovery creates the
-   repaired link with `O_CREAT|O_EXCL|O_NOFOLLOW` and writes through the
-   already-open descriptor. It refuses every existing node type instead of
-   staging, reopening, following, or overwriting a path.
+   repaired link relative to a verified `O_DIRECTORY|O_NOFOLLOW` directory
+   descriptor. It fully writes and syncs an unnamed `O_TMPFILE`, then
+   atomically publishes that completed inode as `.git`; every existing node
+   type is refused and write failures expose no partial link.
 6. **Orphaned directories** (no `.git/worktrees/<name>/` admin entry, `git
    worktree list` doesn't mention them, but the directory is still on
    disk — usually a prior `git worktree remove` that partially failed) are

@@ -38,6 +38,10 @@ if [ ! -d "$WT" ]; then
   exit 1
 fi
 WT_ABS=$(cd "$WT" && pwd -P)
+WT_DEVICE_INODE=$(stat -Lc '%d:%i' -- "$WT_ABS") || {
+  echo "REFUSING: could not identify the worktree directory inode: $WT_ABS" >&2
+  exit 4
+}
 
 # `git worktree remove` is repository-scoped. Resolve the target's owning
 # common directory even when a partial removal already deleted its `.git`
@@ -173,26 +177,50 @@ if [ "$GIT_DIR" = "$GIT_COMMON_DIR" ]; then
     echo "REFUSING: python3 is required for exclusive no-follow Git-link recovery." >&2
     exit 4
   fi
-  if ! python3 - "$WT_ABS/.git" "$WORKTREE_ADMIN_DIR" <<'PY'
+  if ! python3 - "$WT_ABS" "$WT_DEVICE_INODE" "$WORKTREE_ADMIN_DIR" <<'PY'
 import os
 import sys
 
-path, admin_dir = sys.argv[1:]
-flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+worktree, expected_inode, admin_dir = sys.argv[1:]
+directory_fd = None
+temporary_fd = None
 try:
-    fd = os.open(path, flags, 0o600)
-    data = f"gitdir: {admin_dir}\n".encode()
-    while data:
-        written = os.write(fd, data)
-        data = data[written:]
-    os.close(fd)
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd = os.open(worktree, directory_flags)
+    directory_stat = os.fstat(directory_fd)
+    actual_inode = f"{directory_stat.st_dev}:{directory_stat.st_ino}"
+    if actual_inode != expected_inode:
+        raise OSError("worktree directory changed during recovery")
+
+    temporary_fd = os.open(
+        ".",
+        os.O_RDWR | os.O_TMPFILE,
+        0o600,
+        dir_fd=directory_fd,
+    )
+    remaining = memoryview(f"gitdir: {admin_dir}\n".encode())
+    while remaining:
+        written = os.write(temporary_fd, remaining)
+        if written == 0:
+            raise OSError("short write while preparing Git link")
+        remaining = remaining[written:]
+    os.fsync(temporary_fd)
+    os.link(
+        f"/proc/self/fd/{temporary_fd}",
+        ".git",
+        dst_dir_fd=directory_fd,
+        follow_symlinks=True,
+    )
 except OSError as error:
-    try:
-        os.close(fd)
-    except (NameError, OSError):
-        pass
     print(f"exclusive Git-link creation failed: {error}", file=sys.stderr)
     raise SystemExit(1)
+finally:
+    for descriptor in (temporary_fd, directory_fd):
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
 PY
   then
     echo "REFUSING: could not create $WT_ABS/.git atomically; nothing was overwritten." >&2
