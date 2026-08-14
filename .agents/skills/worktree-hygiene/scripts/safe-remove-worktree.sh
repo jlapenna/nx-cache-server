@@ -8,7 +8,7 @@
 #
 # Usage: safe-remove-worktree.sh <worktree-path> [--git-dir <owner>] [--force-anyway] [--dry-run]
 set -euo pipefail
-WT="${1:?usage: safe-remove-worktree.sh <worktree-path> [--force-anyway] [--dry-run]}"
+WT="${1:?usage: safe-remove-worktree.sh <worktree-path> [--git-dir <owner>] [--force-anyway] [--dry-run]}"
 shift
 FORCE_ANYWAY=false
 DRY_RUN=false
@@ -178,12 +178,15 @@ if [ "$GIT_DIR" = "$GIT_COMMON_DIR" ]; then
     exit 4
   fi
   if ! python3 - "$WT_ABS" "$WT_DEVICE_INODE" "$WORKTREE_ADMIN_DIR" <<'PY'
+import errno
 import os
+import secrets
 import sys
 
 worktree, expected_inode, admin_dir = sys.argv[1:]
 directory_fd = None
 temporary_fd = None
+temporary_name = None
 try:
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     directory_fd = os.open(worktree, directory_flags)
@@ -192,12 +195,38 @@ try:
     if actual_inode != expected_inode:
         raise OSError("worktree directory changed during recovery")
 
-    temporary_fd = os.open(
-        ".",
-        os.O_RDWR | os.O_TMPFILE,
-        0o600,
-        dir_fd=directory_fd,
-    )
+    unsupported_tmpfile_errors = {
+        errno.EINVAL,
+        errno.EISDIR,
+        errno.ENOSYS,
+        errno.EOPNOTSUPP,
+    }
+    try:
+        temporary_fd = os.open(
+            ".",
+            os.O_RDWR | os.O_TMPFILE,
+            0o600,
+            dir_fd=directory_fd,
+        )
+    except OSError as error:
+        if error.errno not in unsupported_tmpfile_errors:
+            raise
+        for _ in range(128):
+            candidate = f".git-recovery-{secrets.token_hex(16)}"
+            try:
+                temporary_fd = os.open(
+                    candidate,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600,
+                    dir_fd=directory_fd,
+                )
+                temporary_name = candidate
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise OSError("could not allocate an exclusive recovery file")
+
     remaining = memoryview(f"gitdir: {admin_dir}\n".encode())
     while remaining:
         written = os.write(temporary_fd, remaining)
@@ -205,16 +234,30 @@ try:
             raise OSError("short write while preparing Git link")
         remaining = remaining[written:]
     os.fsync(temporary_fd)
-    os.link(
-        f"/proc/self/fd/{temporary_fd}",
-        ".git",
-        dst_dir_fd=directory_fd,
-        follow_symlinks=True,
-    )
+    if temporary_name is None:
+        os.link(
+            f"/proc/self/fd/{temporary_fd}",
+            ".git",
+            dst_dir_fd=directory_fd,
+            follow_symlinks=True,
+        )
+    else:
+        os.link(
+            temporary_name,
+            ".git",
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+            follow_symlinks=False,
+        )
 except OSError as error:
     print(f"exclusive Git-link creation failed: {error}", file=sys.stderr)
     raise SystemExit(1)
 finally:
+    if temporary_name is not None and directory_fd is not None:
+        try:
+            os.unlink(temporary_name, dir_fd=directory_fd)
+        except OSError:
+            pass
     for descriptor in (temporary_fd, directory_fd):
         if descriptor is not None:
             try:
