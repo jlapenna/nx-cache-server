@@ -135,18 +135,42 @@ if [ "$GIT_DIR" = "$GIT_COMMON_DIR" ]; then
     exit 2
   fi
   if [ "$FORCE_ANYWAY" != true ]; then
-    echo "REFUSING: inspect this orphaned directory, then re-run with --force-anyway to prune its Git record and remove it." >&2
+    echo "REFUSING: inspect this orphaned directory, then re-run with --force-anyway to repair its Git link and remove it." >&2
+    exit 4
+  fi
+
+  WORKTREE_ADMIN_DIR=""
+  for admin_dir in "$GIT_COMMON_DIR"/worktrees/*; do
+    [ -d "$admin_dir" ] && [ ! -L "$admin_dir" ] && [ -f "$admin_dir/gitdir" ] || continue
+    admin_git_link=$(sed -n '1p' "$admin_dir/gitdir")
+    [ "$(basename "$admin_git_link")" = ".git" ] || continue
+    admin_worktree=$(dirname "$admin_git_link")
+    [ -d "$admin_worktree" ] || continue
+    admin_worktree=$(cd "$admin_worktree" && pwd -P)
+    [ "$admin_worktree" = "$WT_ABS" ] || continue
+    if [ -n "$WORKTREE_ADMIN_DIR" ]; then
+      echo "REFUSING: multiple Git administrative records point to $WT_ABS." >&2
+      exit 4
+    fi
+    WORKTREE_ADMIN_DIR=$(cd "$admin_dir" && pwd -P)
+  done
+  if [ -z "$WORKTREE_ADMIN_DIR" ]; then
+    echo "REFUSING: could not identify the exact Git administrative record for $WT_ABS." >&2
     exit 4
   fi
 
   echo "== recovering partially removed worktree $WT_ABS =="
   if [ "$DRY_RUN" = true ]; then
-    echo "DRY RUN: git --git-dir=\"$GIT_COMMON_DIR\" worktree prune"
-    echo "DRY RUN: rm -rf -- \"$WT_ABS\""
+    echo "DRY RUN: restore $WT_ABS/.git -> $WORKTREE_ADMIN_DIR"
+    echo "DRY RUN: git --git-dir=\"$GIT_COMMON_DIR\" worktree remove \"$WT_ABS\" --force"
     exit 0
   fi
-  git --git-dir="$GIT_COMMON_DIR" worktree prune
-  rm -rf -- "$WT_ABS"
+  printf 'gitdir: %s\n' "$WORKTREE_ADMIN_DIR" >"$WT_ABS/.git"
+  if ! git --git-dir="$GIT_COMMON_DIR" worktree remove "$WT_ABS" --force; then
+    echo "ERROR: exact worktree removal failed after restoring $WT_ABS/.git." >&2
+    echo "The Git link is repaired; inspect the worktree and rerun normal removal." >&2
+    exit 5
+  fi
   echo "done."
   exit 0
 fi
