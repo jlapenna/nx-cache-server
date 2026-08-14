@@ -186,7 +186,6 @@ import sys
 worktree, expected_inode, admin_dir = sys.argv[1:]
 directory_fd = None
 temporary_fd = None
-temporary_name = None
 try:
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     directory_fd = os.open(worktree, directory_flags)
@@ -198,6 +197,7 @@ try:
     unsupported_tmpfile_errors = {
         errno.EINVAL,
         errno.EISDIR,
+        errno.ENOENT,
         errno.ENOSYS,
         errno.EOPNOTSUPP,
     }
@@ -220,7 +220,6 @@ try:
                     0o600,
                     dir_fd=directory_fd,
                 )
-                temporary_name = candidate
                 break
             except FileExistsError:
                 continue
@@ -246,11 +245,6 @@ except OSError as error:
     print(f"exclusive Git-link creation failed: {error}", file=sys.stderr)
     raise SystemExit(1)
 finally:
-    if temporary_name is not None and directory_fd is not None:
-        try:
-            os.unlink(temporary_name, dir_fd=directory_fd)
-        except OSError:
-            pass
     for descriptor in (temporary_fd, directory_fd):
         if descriptor is not None:
             try:
@@ -260,11 +254,12 @@ finally:
 PY
   then
     echo "REFUSING: could not create $WT_ABS/.git atomically; nothing was overwritten." >&2
+    echo "A safe .git-recovery-* staging link may remain inside the worktree for inspection." >&2
     exit 4
   fi
   if ! git --git-dir="$GIT_COMMON_DIR" worktree remove "$WT_ABS" --force; then
     echo "ERROR: exact worktree removal failed after restoring $WT_ABS/.git." >&2
-    echo "The Git link is repaired; inspect the worktree and rerun normal removal." >&2
+    echo "The Git link is repaired; inspect it and any .git-recovery-* staging link, then rerun normal removal." >&2
     exit 5
   fi
   echo "done."
