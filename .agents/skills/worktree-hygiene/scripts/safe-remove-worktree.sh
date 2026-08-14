@@ -160,12 +160,19 @@ if [ "$GIT_DIR" = "$GIT_COMMON_DIR" ]; then
   fi
 
   echo "== recovering partially removed worktree $WT_ABS =="
+  if [ -e "$WT_ABS/.git" ] || [ -L "$WT_ABS/.git" ]; then
+    echo "REFUSING: $WT_ABS/.git appeared during recovery; it will not be overwritten." >&2
+    exit 4
+  fi
   if [ "$DRY_RUN" = true ]; then
     echo "DRY RUN: restore $WT_ABS/.git -> $WORKTREE_ADMIN_DIR"
     echo "DRY RUN: git --git-dir=\"$GIT_COMMON_DIR\" worktree remove \"$WT_ABS\" --force"
     exit 0
   fi
-  printf 'gitdir: %s\n' "$WORKTREE_ADMIN_DIR" >"$WT_ABS/.git"
+  if ! (set -o noclobber; printf 'gitdir: %s\n' "$WORKTREE_ADMIN_DIR" >"$WT_ABS/.git"); then
+    echo "REFUSING: could not create $WT_ABS/.git exclusively; nothing was overwritten." >&2
+    exit 4
+  fi
   if ! git --git-dir="$GIT_COMMON_DIR" worktree remove "$WT_ABS" --force; then
     echo "ERROR: exact worktree removal failed after restoring $WT_ABS/.git." >&2
     echo "The Git link is repaired; inspect the worktree and rerun normal removal." >&2

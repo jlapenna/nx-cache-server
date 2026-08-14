@@ -144,7 +144,9 @@ Before running `git worktree remove`, work through this checklist — a
    That recovery identifies only the target's administrative record, restores
    its missing `.git` link, and asks `git worktree remove` to remove that
    exact checkout. It never runs repository-wide `git worktree prune`, so
-   unrelated stale worktree records remain recoverable.
+   unrelated stale worktree records remain recoverable. Recovery creates the
+   repaired link exclusively and refuses any existing path (including a
+   dangling symlink) instead of following or overwriting it.
 6. **Orphaned directories** (no `.git/worktrees/<name>/` admin entry, `git
    worktree list` doesn't mention them, but the directory is still on
    disk — usually a prior `git worktree remove` that partially failed) are
