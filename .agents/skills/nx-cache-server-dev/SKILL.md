@@ -32,5 +32,5 @@ checkout stays clean on `main`.
 4. Follow [references/pr.md](references/pr.md) through merge and cleanup.
 
 The active `Protect main` ruleset is managed by Homelab Terraform. It requires
-the `Verify` check, resolved review threads, linear history, and disallows
+the `verify` check, resolved review threads, linear history, and disallows
 force-pushes or protected-branch deletion.

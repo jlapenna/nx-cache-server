@@ -2,7 +2,7 @@
 
 Create a ready PR with the change, rationale, security impact where relevant,
 and exact verification. Confirm the pushed SHA matches the PR head and that the
-required `Verify` check was created.
+required `verify` check was created.
 
 Repeat until the current head is complete:
 
@@ -16,7 +16,7 @@ Repeat until the current head is complete:
 4. Re-check CI and review after every push; evidence from an older head does
    not count.
 
-Squash-merge through protection when `Verify` passes and all actionable threads
+Squash-merge through protection when `verify` passes and all actionable threads
 are resolved. Confirm `gh pr view --json state,mergedAt,mergeCommit` reports an
 actual merge. Do not deploy; Homelab owns rollout.
 
