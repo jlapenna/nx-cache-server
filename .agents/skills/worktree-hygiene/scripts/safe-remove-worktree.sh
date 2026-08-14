@@ -234,21 +234,14 @@ try:
             raise OSError("short write while preparing Git link")
         remaining = remaining[written:]
     os.fsync(temporary_fd)
-    if temporary_name is None:
-        os.link(
-            f"/proc/self/fd/{temporary_fd}",
-            ".git",
-            dst_dir_fd=directory_fd,
-            follow_symlinks=True,
-        )
-    else:
-        os.link(
-            temporary_name,
-            ".git",
-            src_dir_fd=directory_fd,
-            dst_dir_fd=directory_fd,
-            follow_symlinks=False,
-        )
+    # Publish the inode that was actually written, never the mutable staging
+    # pathname. This stays safe if another process renames or replaces it.
+    os.link(
+        f"/proc/self/fd/{temporary_fd}",
+        ".git",
+        dst_dir_fd=directory_fd,
+        follow_symlinks=True,
+    )
 except OSError as error:
     print(f"exclusive Git-link creation failed: {error}", file=sys.stderr)
     raise SystemExit(1)

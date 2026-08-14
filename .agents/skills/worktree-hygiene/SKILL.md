@@ -149,8 +149,9 @@ Before running `git worktree remove`, work through this checklist — a
    descriptor. It fully writes and syncs an unnamed `O_TMPFILE`, then
    atomically publishes that completed inode as `.git`. On filesystems without
    `O_TMPFILE`, it instead uses an exclusive descriptor-relative staging file
-   and an atomic no-overwrite hard link. Every existing node type is refused,
-   and write failures expose no partial `.git` link.
+   and publishes the opened staging inode through its descriptor with an atomic
+   no-overwrite hard link. Every existing node type is refused, and write
+   failures expose no partial `.git` link.
 6. **Orphaned directories** (no `.git/worktrees/<name>/` admin entry, `git
    worktree list` doesn't mention them, but the directory is still on
    disk — usually a prior `git worktree remove` that partially failed) are
