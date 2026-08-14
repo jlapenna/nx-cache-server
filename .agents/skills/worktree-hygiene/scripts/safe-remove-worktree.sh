@@ -29,16 +29,39 @@ if [ ! -d "$WT" ]; then
 fi
 WT_ABS=$(cd "$WT" && pwd)
 
-# `git worktree remove` is repository-scoped. Calling it from whichever
-# repository happened to invoke this helper works only by accident when that
-# repository owns the target. Resolve the target's own common git directory so
-# the helper safely removes worktrees across repositories.
-if ! git -C "$WT_ABS" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo "REFUSING: $WT_ABS is not a Git worktree." >&2
-  exit 4
+# `git worktree remove` is repository-scoped. Resolve the target's owning
+# common directory even when a partial removal already deleted its `.git`
+# link. For the missing-link case, inspect ancestor and sibling repositories'
+# authoritative worktree records for this exact path.
+GIT_DIR=""
+GIT_COMMON_DIR=""
+if git -C "$WT_ABS" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_DIR=$(git -C "$WT_ABS" rev-parse --path-format=absolute --git-dir)
+  GIT_COMMON_DIR=$(git -C "$WT_ABS" rev-parse --path-format=absolute --git-common-dir)
+else
+  search_parent=$(dirname "$WT_ABS")
+  candidates=()
+  ancestor="$search_parent"
+  while [ "$ancestor" != "/" ]; do
+    [ -d "$ancestor/.git" ] && candidates+=("$ancestor/.git")
+    ancestor=$(dirname "$ancestor")
+  done
+  for candidate in "$search_parent"/*/.git; do
+    [ -d "$candidate" ] && candidates+=("$candidate")
+  done
+  for candidate in "${candidates[@]}"; do
+    records=$(git --git-dir="$candidate" worktree list --porcelain 2>/dev/null || true)
+    if printf '%s\n' "$records" | grep -Fqx "worktree $WT_ABS"; then
+      GIT_COMMON_DIR=$(cd "$candidate" && pwd)
+      GIT_DIR="$GIT_COMMON_DIR"
+      break
+    fi
+  done
+  if [ -z "$GIT_COMMON_DIR" ]; then
+    echo "REFUSING: $WT_ABS is not a registered Git worktree." >&2
+    exit 4
+  fi
 fi
-GIT_DIR=$(git -C "$WT_ABS" rev-parse --path-format=absolute --git-dir)
-GIT_COMMON_DIR=$(git -C "$WT_ABS" rev-parse --path-format=absolute --git-common-dir)
 WORKTREE_RECORDS=$(git --git-dir="$GIT_COMMON_DIR" worktree list --porcelain)
 PRIMARY_WORKTREE=$(printf '%s\n' "$WORKTREE_RECORDS" | sed -n 's/^worktree //p' | head -n 1)
 if [ "$WT_ABS" = "$PRIMARY_WORKTREE" ]; then
@@ -65,7 +88,7 @@ if [ "$GIT_DIR" = "$GIT_COMMON_DIR" ]; then
     pid="${pid_dir#/proc/}"
     link=$(readlink "$pid_dir/cwd" 2>/dev/null) || continue
     case "$link" in
-      "$WT_ABS"*) ;;
+      "$WT_ABS" | "$WT_ABS"/*) ;;
       *) continue ;;
     esac
     cmd=$(tr '\0' ' ' < "$pid_dir/cmdline" 2>/dev/null || echo "?")
@@ -101,7 +124,7 @@ for pid_dir in /proc/[0-9]*; do
   pid="${pid_dir#/proc/}"
   link=$(readlink "$pid_dir/cwd" 2>/dev/null) || continue
   case "$link" in
-    "$WT_ABS"*) ;;
+    "$WT_ABS" | "$WT_ABS"/*) ;;
     *) continue ;;
   esac
   cmd=$(tr '\0' ' ' < "$pid_dir/cmdline" 2>/dev/null || echo "?")
