@@ -169,10 +169,21 @@ if [ "$GIT_DIR" = "$GIT_COMMON_DIR" ]; then
     echo "DRY RUN: git --git-dir=\"$GIT_COMMON_DIR\" worktree remove \"$WT_ABS\" --force"
     exit 0
   fi
-  if ! (set -o noclobber; printf 'gitdir: %s\n' "$WORKTREE_ADMIN_DIR" >"$WT_ABS/.git"); then
-    echo "REFUSING: could not create $WT_ABS/.git exclusively; nothing was overwritten." >&2
+  repair_file=$(mktemp "$WT_ABS/.git.repair.XXXXXX") || {
+    echo "REFUSING: could not create a private repair file under $WT_ABS." >&2
+    exit 4
+  }
+  if ! printf 'gitdir: %s\n' "$WORKTREE_ADMIN_DIR" >"$repair_file"; then
+    unlink "$repair_file"
+    echo "REFUSING: could not write the private repair file." >&2
     exit 4
   fi
+  if ! ln -- "$repair_file" "$WT_ABS/.git"; then
+    unlink "$repair_file"
+    echo "REFUSING: could not create $WT_ABS/.git atomically; nothing was overwritten." >&2
+    exit 4
+  fi
+  unlink "$repair_file"
   if ! git --git-dir="$GIT_COMMON_DIR" worktree remove "$WT_ABS" --force; then
     echo "ERROR: exact worktree removal failed after restoring $WT_ABS/.git." >&2
     echo "The Git link is repaired; inspect the worktree and rerun normal removal." >&2
