@@ -133,10 +133,13 @@ Before running `git worktree remove`, work through this checklist — a
    is still in active use. If a previous removal left the directory but
    removed its `.git` link, the helper identifies it as a **partially removed
    linked worktree** (not the primary checkout), refuses by default, and can
-   recover it only after review:
+   recover it only after review. If the owning checkout is not an ancestor or
+   immediate sibling (for example, a centralized `worktrees/` directory),
+   identify it explicitly with `--git-dir <owning-checkout-or-git-dir>`:
    ```bash
    scripts/safe-remove-worktree.sh <worktree-path> --force-anyway --dry-run
    scripts/safe-remove-worktree.sh <worktree-path> --force-anyway
+   scripts/safe-remove-worktree.sh <worktree-path> --git-dir <owner> --force-anyway --dry-run
    ```
    That recovery prunes Git's stale worktree record and removes the exact
    orphaned directory, so use it only after checking its contents and live

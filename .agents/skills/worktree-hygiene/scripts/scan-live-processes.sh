@@ -9,7 +9,7 @@
 # Usage: scan-live-processes.sh <directory>
 set -euo pipefail
 target="${1:?usage: scan-live-processes.sh <directory>}"
-target=$(cd "$target" && pwd)
+target=$(cd "$target" && pwd -P)
 
 found=0
 for pid_dir in /proc/[0-9]*; do

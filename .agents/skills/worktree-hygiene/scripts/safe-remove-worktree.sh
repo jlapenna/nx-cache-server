@@ -6,28 +6,38 @@
 # still-in-use or crashed-but-unmerged session, not garbage. Override only
 # after you've personally reviewed what it would refuse to remove.
 #
-# Usage: safe-remove-worktree.sh <worktree-path> [--force-anyway] [--dry-run]
+# Usage: safe-remove-worktree.sh <worktree-path> [--git-dir <owner>] [--force-anyway] [--dry-run]
 set -euo pipefail
 WT="${1:?usage: safe-remove-worktree.sh <worktree-path> [--force-anyway] [--dry-run]}"
 shift
 FORCE_ANYWAY=false
 DRY_RUN=false
-for option in "$@"; do
-  case "$option" in
+OWNER=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --force-anyway) FORCE_ANYWAY=true ;;
     --dry-run) DRY_RUN=true ;;
+    --git-dir)
+      [ "$#" -ge 2 ] || {
+        echo "--git-dir requires an owning checkout or Git directory" >&2
+        exit 64
+      }
+      OWNER="$2"
+      shift
+      ;;
     *)
-      echo "unknown option: $option" >&2
+      echo "unknown option: $1" >&2
       exit 64
       ;;
   esac
+  shift
 done
 
 if [ ! -d "$WT" ]; then
   echo "no such directory: $WT" >&2
   exit 1
 fi
-WT_ABS=$(cd "$WT" && pwd)
+WT_ABS=$(cd "$WT" && pwd -P)
 
 # `git worktree remove` is repository-scoped. Resolve the target's owning
 # common directory even when a partial removal already deleted its `.git`
@@ -35,7 +45,22 @@ WT_ABS=$(cd "$WT" && pwd)
 # authoritative worktree records for this exact path.
 GIT_DIR=""
 GIT_COMMON_DIR=""
-if git -C "$WT_ABS" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if [ -n "$OWNER" ]; then
+  if git -C "$OWNER" rev-parse --git-dir >/dev/null 2>&1; then
+    GIT_COMMON_DIR=$(git -C "$OWNER" rev-parse --path-format=absolute --git-common-dir)
+  elif git --git-dir="$OWNER" rev-parse --git-dir >/dev/null 2>&1; then
+    GIT_COMMON_DIR=$(git --git-dir="$OWNER" rev-parse --path-format=absolute --git-common-dir)
+  else
+    echo "REFUSING: --git-dir does not identify an owning checkout or Git directory: $OWNER" >&2
+    exit 4
+  fi
+  GIT_DIR="$GIT_COMMON_DIR"
+  owner_records=$(git --git-dir="$GIT_COMMON_DIR" worktree list --porcelain 2>/dev/null || true)
+  if ! printf '%s\n' "$owner_records" | grep -Fqx "worktree $WT_ABS"; then
+    echo "REFUSING: $WT_ABS is not registered to --git-dir $OWNER." >&2
+    exit 4
+  fi
+elif git -C "$WT_ABS" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   GIT_DIR=$(git -C "$WT_ABS" rev-parse --path-format=absolute --git-dir)
   GIT_COMMON_DIR=$(git -C "$WT_ABS" rev-parse --path-format=absolute --git-common-dir)
 else
