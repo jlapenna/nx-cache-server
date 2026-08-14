@@ -147,8 +147,14 @@ Before running `git worktree remove`, work through this checklist — a
    unrelated stale worktree records remain recoverable. Recovery creates the
    repaired link relative to a verified `O_DIRECTORY|O_NOFOLLOW` directory
    descriptor. It fully writes and syncs an unnamed `O_TMPFILE`, then
-   atomically publishes that completed inode as `.git`; every existing node
-   type is refused and write failures expose no partial link.
+   atomically publishes that completed inode as `.git`. On filesystems without
+   `O_TMPFILE`, it instead uses an exclusive descriptor-relative staging file
+   and publishes the opened staging inode through its descriptor with an atomic
+   no-overwrite hard link. Every existing node type is refused, and write
+   failures expose no partial `.git` link. The named staging hard link is not
+   unlinked by pathname, because another writer could replace that name during
+   cleanup; the immediately following worktree removal deletes it. If removal
+   fails, the safe `.git-recovery-*` link remains for inspection.
 6. **Orphaned directories** (no `.git/worktrees/<name>/` admin entry, `git
    worktree list` doesn't mention them, but the directory is still on
    disk — usually a prior `git worktree remove` that partially failed) are

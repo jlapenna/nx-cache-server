@@ -8,7 +8,7 @@
 #
 # Usage: safe-remove-worktree.sh <worktree-path> [--git-dir <owner>] [--force-anyway] [--dry-run]
 set -euo pipefail
-WT="${1:?usage: safe-remove-worktree.sh <worktree-path> [--force-anyway] [--dry-run]}"
+WT="${1:?usage: safe-remove-worktree.sh <worktree-path> [--git-dir <owner>] [--force-anyway] [--dry-run]}"
 shift
 FORCE_ANYWAY=false
 DRY_RUN=false
@@ -178,7 +178,9 @@ if [ "$GIT_DIR" = "$GIT_COMMON_DIR" ]; then
     exit 4
   fi
   if ! python3 - "$WT_ABS" "$WT_DEVICE_INODE" "$WORKTREE_ADMIN_DIR" <<'PY'
+import errno
 import os
+import secrets
 import sys
 
 worktree, expected_inode, admin_dir = sys.argv[1:]
@@ -192,12 +194,38 @@ try:
     if actual_inode != expected_inode:
         raise OSError("worktree directory changed during recovery")
 
-    temporary_fd = os.open(
-        ".",
-        os.O_RDWR | os.O_TMPFILE,
-        0o600,
-        dir_fd=directory_fd,
-    )
+    unsupported_tmpfile_errors = {
+        errno.EINVAL,
+        errno.EISDIR,
+        errno.ENOENT,
+        errno.ENOSYS,
+        errno.EOPNOTSUPP,
+    }
+    try:
+        temporary_fd = os.open(
+            ".",
+            os.O_RDWR | os.O_TMPFILE,
+            0o600,
+            dir_fd=directory_fd,
+        )
+    except OSError as error:
+        if error.errno not in unsupported_tmpfile_errors:
+            raise
+        for _ in range(128):
+            candidate = f".git-recovery-{secrets.token_hex(16)}"
+            try:
+                temporary_fd = os.open(
+                    candidate,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600,
+                    dir_fd=directory_fd,
+                )
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise OSError("could not allocate an exclusive recovery file")
+
     remaining = memoryview(f"gitdir: {admin_dir}\n".encode())
     while remaining:
         written = os.write(temporary_fd, remaining)
@@ -205,6 +233,8 @@ try:
             raise OSError("short write while preparing Git link")
         remaining = remaining[written:]
     os.fsync(temporary_fd)
+    # Publish the inode that was actually written, never the mutable staging
+    # pathname. This stays safe if another process renames or replaces it.
     os.link(
         f"/proc/self/fd/{temporary_fd}",
         ".git",
@@ -224,11 +254,12 @@ finally:
 PY
   then
     echo "REFUSING: could not create $WT_ABS/.git atomically; nothing was overwritten." >&2
+    echo "A safe .git-recovery-* staging link may remain inside the worktree for inspection." >&2
     exit 4
   fi
   if ! git --git-dir="$GIT_COMMON_DIR" worktree remove "$WT_ABS" --force; then
     echo "ERROR: exact worktree removal failed after restoring $WT_ABS/.git." >&2
-    echo "The Git link is repaired; inspect the worktree and rerun normal removal." >&2
+    echo "The Git link is repaired; inspect it and any .git-recovery-* staging link, then rerun normal removal." >&2
     exit 5
   fi
   echo "done."
