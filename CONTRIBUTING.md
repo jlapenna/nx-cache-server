@@ -11,7 +11,7 @@ Codex and Claude sessions use the repository hook configuration in
 or `gh issue edit` are checked for the `jclaw-bot` issue claim and matching
 tmux title before hands-on work continues.
 
-The active GitHub `Protect main` ruleset requires the `Verify` check, pull
+The active GitHub `Protect main` ruleset requires the `verify` check, pull
 requests with resolved review threads, linear history, and disallows force
 pushes and branch deletion.
 

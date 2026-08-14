@@ -1,0 +1,22 @@
+{
+  "name": "nx-cache-server-repo-skills",
+  "owner": {
+    "name": "Joe LaPenna"
+  },
+  "metadata": {
+    "description": "nx-cache-server repository development skills.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "nx-cache-server-skills",
+      "description": "Repository-specific development and pull-request guardrails for nx-cache-server.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./nx-cache-server-dev",
+        "./worktree-hygiene"
+      ]
+    }
+  ]
+}
