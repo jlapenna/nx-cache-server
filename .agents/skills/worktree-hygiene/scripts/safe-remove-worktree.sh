@@ -54,7 +54,17 @@ if [ -n "$OWNER" ]; then
     echo "REFUSING: --git-dir does not identify an owning checkout or Git directory: $OWNER" >&2
     exit 4
   fi
-  GIT_DIR="$GIT_COMMON_DIR"
+  if [ -e "$WT_ABS/.git" ] &&
+    git -C "$WT_ABS" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    target_common_dir=$(git -C "$WT_ABS" rev-parse --path-format=absolute --git-common-dir)
+    if [ "$target_common_dir" != "$GIT_COMMON_DIR" ]; then
+      echo "REFUSING: $WT_ABS is not owned by --git-dir $OWNER." >&2
+      exit 4
+    fi
+    GIT_DIR=$(git -C "$WT_ABS" rev-parse --path-format=absolute --git-dir)
+  else
+    GIT_DIR="$GIT_COMMON_DIR"
+  fi
   owner_records=$(git --git-dir="$GIT_COMMON_DIR" worktree list --porcelain 2>/dev/null || true)
   if ! printf '%s\n' "$owner_records" | grep -Fqx "worktree $WT_ABS"; then
     echo "REFUSING: $WT_ABS is not registered to --git-dir $OWNER." >&2
