@@ -13,14 +13,11 @@ implementation and commits use a linked worktree initialized by
 ## Agent fleet membership
 
 This repository is a member of the Agent LCARS fleet (onboarded in
-jlapenna/agent-lcars#1325). Everything that is true of _every_ member --
-dispatch topology, the `@main` reference policy, agent conventions, the
-`agent-lcars-bot` claim identity, fleet tooling, the credential rule -- is
-in [`.agents/fleet-membership.md`](.agents/fleet-membership.md).
-
-That file is canonical in jlapenna/agent-lcars and kept byte-identical here
-by `.github/canonical-sync.conf`, which `validate.yml` checks on every pull
-request (agent-lcars#1340 B9). Edit it there, never here.
+jlapenna/agent-lcars#1325). The fleet's own conventions live in that repo
+and are deliberately not restated here: read
+`.agents/skills/agent-protocol/` for how a dispatched agent behaves, and
+its `docs/` for the dispatch, credential, and published-workflow
+contracts.
 
 The worktree rules above are this repo's own, and they apply to dispatched
 agents too.
