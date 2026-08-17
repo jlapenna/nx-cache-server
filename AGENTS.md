@@ -21,7 +21,11 @@ docs/published-actions.md), and `agent-automerge.yml` auto-merges
 agent-authored PRs the same way. Dispatched agents follow agent-lcars's
 **agent-protocol** skill (takeover comment, parking, deliverable evidence)
 and its **lcars** delta, and the fleet claims issues as `agent-lcars-bot`.
-The worktree rules above apply to dispatched agents too. Vendored
-fleet-canonical scripts (`.github/canonical-sync.conf`) are enforced
-byte-identical by CI -- never edit a vendored copy in place; fix the
-canonical file in jlapenna/agent-lcars and re-sync.
+The worktree rules above apply to dispatched agents too. No fleet
+script copies are vendored here (agent-lcars#1328): the `fleet-*`
+commands come from the fleet-tools package in jlapenna/agent-lcars,
+installed on each machine's PATH with
+`pnpm add -g "github:jlapenna/agent-lcars#main&path:packages/fleet-tools"`
+(always `#main`; never a pinned tag or SHA). Sessions watch PRs with
+`fleet-watch-prs`; hooks guard every invocation with `command -v`, so a
+machine without the package degrades quietly.
