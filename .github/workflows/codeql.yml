@@ -1,5 +1,15 @@
 name: CodeQL
 
+# Thin caller of agent-lcars's fleet-published codeql-reusable.yml
+# (agent-lcars#1340 A-R6 -- see agent-lcars's docs/published-actions.md).
+# This caller owns what workflow_call cannot carry: the triggers
+# (including this repo's weekly cron, staggered from agent-lcars's) and
+# the permission grant; the analyze steps -- and the reasoning for their
+# unconditional ubuntu-latest runner -- live in the reusable. The
+# check-run name changes from "Analyze JavaScript" to
+# "analyze / Analyze (javascript-typescript)"; the ruleset's required
+# check is ci.yml's "verify", so nothing gates on the old name.
+
 on:
   pull_request:
   push:
@@ -9,16 +19,13 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   analyze:
-    name: Analyze JavaScript
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: github/codeql-action/init@v4
-        with:
-          languages: javascript-typescript
-          build-mode: none
-      - uses: github/codeql-action/analyze@v4
+    uses: jlapenna/agent-lcars/.github/workflows/codeql-reusable.yml@main # latest
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    with:
+      languages: javascript-typescript
