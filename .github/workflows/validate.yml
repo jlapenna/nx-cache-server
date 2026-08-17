@@ -1,0 +1,40 @@
+name: validate
+
+# Minimal repository validation for the agent-fleet surface
+# (agent-lcars#1325): lints every workflow file. Runs on GitHub-hosted
+# runners on purpose -- it must stay green-capable before this repo's
+# self-hosted fleet capacity deploys, and glue checks must never queue
+# behind a long agent session.
+#
+# No fleet scripts are vendored here (agent-lcars#1328): the fleet-*
+# commands come from the fleet-tools package in jlapenna/agent-lcars,
+# installed on each machine's PATH, so there are no script copies to
+# check for drift and no canonical-sync step.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Declared rather than inherited: every step is a read-only check, so
+# nothing beyond checkout is needed.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  validate:
+    name: repository validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Lint every workflow, including the thin fleet lane callers.
+      - name: actionlint
+        uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: -color
