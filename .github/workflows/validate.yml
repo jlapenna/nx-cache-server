@@ -1,0 +1,48 @@
+name: validate
+
+# Minimal repository validation for the agent-fleet surface
+# (agent-lcars#1325): fails when a vendored fleet-canonical script drifts
+# from jlapenna/agent-lcars (see .github/canonical-sync.conf), and lints
+# every workflow file. Runs on GitHub-hosted runners on purpose -- it must
+# stay green-capable before this repo's self-hosted fleet capacity
+# deploys, and glue checks must never queue behind a long agent session.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Declared rather than inherited: every step is a read-only check, and
+# check-canonical-sync's code lives in another repository -- the narrower
+# the token it runs with, the less a bad commit there can reach.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  validate:
+    name: repository validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Byte-identity of every vendored fleet-canonical script against
+      # jlapenna/agent-lcars@main; --forbid-strays additionally fails if a
+      # copy of a canonicalized script's basename grows back at an
+      # undeclared path. @main deliberately, matching every other
+      # reference to that repo's published actions (its
+      # docs/published-actions.md).
+      - name: Fleet-canonical script sync
+        uses: jlapenna/agent-lcars/.github/actions/check-canonical-sync@main # latest
+        with:
+          forbid-strays: 'true'
+
+      # Lint every workflow, including the thin fleet lane callers.
+      - name: actionlint
+        uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: -color
