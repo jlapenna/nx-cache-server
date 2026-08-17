@@ -119,7 +119,6 @@ jobs:
       telemetry-workload-identity-provider: ${{ vars.GCP_WIF_PROVIDER }}
       telemetry-service-account: ${{ vars.GCP_TELEMETRY_WRITER_SA }}
       agent-fleet-login: ${{ vars.AGENT_FLEET_LOGIN }}
-      maintainer-login: ${{ vars.MAINTAINER_LOGIN }}
       agent-lcars-client-id: ${{ vars.AGENT_LCARS_CLIENT_ID }}
       # The attempt-claim marker below is rendered here in the caller from
       # the same trusted dispatch inputs the lane derives ATTEMPT_ID from -
@@ -189,8 +188,6 @@ jobs:
       dispatch-token: ${{ inputs.broker_dispatch_token }}
       worker-workflow: codex.yml
       worker-result: ${{ needs.codex.result }}
-      mode: ${{ inputs.mode }}
-      runbook: ${{ inputs.runbook }}
       agent: Codex
       fleet-login: ${{ vars.AGENT_FLEET_LOGIN }}
       maintainer: ${{ vars.MAINTAINER_LOGIN }}
