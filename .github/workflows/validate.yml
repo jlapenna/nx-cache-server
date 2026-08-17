@@ -1,36 +1,11 @@
 name: validate
 
-# Thin caller of the fleet-published repo-validation.yml reusable
-# workflow (agent-lcars#1340 A-R5 -- see agent-lcars's
-# docs/published-actions.md). The actionlint job body this file used to
-# carry (byte-identical across the fleet's small repos, +1 line here)
-# now lands from one place; this caller owns only the triggers,
-# permissions, and concurrency below. Reports as the composed check
-# "validate / repository validation".
-#
-# The one line this repo loses: its checkout step was SHA-pinned per
-# this repo's Renovate pin-digests policy. A caller has no checkout --
-# it now happens inside the reusable, at agent-lcars's
-# actions/checkout@v7 convention, where this repo's Renovate cannot pin
-# it. Accepted trade (noted in agent-lcars's docs/published-actions.md).
-#
-# Runs on GitHub-hosted runners (the reusable's default) on purpose --
-# it must stay green-capable before this repo's self-hosted fleet
-# capacity deploys, and glue checks must never queue behind a long
-# agent session.
-
 on:
   push:
     branches: [main]
   pull_request:
-  # Restorable and re-runnable by hand: the agent-automerge reusable's
-  # restore-main-checks job re-runs a GITHUB_TOKEN-suppressed main-branch
-  # validation via `gh workflow run`, which requires this trigger -- the
-  # inlined predecessor never had it, so that restore path could not
-  # actually dispatch this workflow.
   workflow_dispatch:
 
-# Declared rather than inherited: everything here is a read-only check.
 permissions:
   contents: read
 
@@ -42,6 +17,4 @@ jobs:
   validate:
     uses: jlapenna/agent-lcars/.github/workflows/repo-validation.yml@main # latest
     with:
-      # Also check .github/canonical-sync.conf: the files this repo copies
-      # verbatim from agent-lcars (agent-lcars#1340 B8).
       canonical-sync: true
