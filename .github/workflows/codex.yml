@@ -1,30 +1,5 @@
 name: Codex Issue Agent
 
-# Thin caller of the fleet-published reusable Codex lane,
-# jlapenna/agent-lcars/.github/workflows/agent-lane-codex.yml, consumed
-# cross-repo at @main like every other published action from that repo
-# (see its docs/published-actions.md). Onboarded in agent-lcars#1325.
-#
-# This workflow is workflow_dispatch-only: the central orchestrator
-# (agent-lcars, the hosted control plane at lcars.jlapenna.net) owns every
-# event trigger, authorizes the request, and dispatches this worker with
-# the issue number and an immutable broker binding as plain inputs. This
-# file keeps only what workflow_call cannot carry: the workflow_dispatch
-# input contract, the console's contract-tested run-name, the job-level
-# subscription-auth concurrency group, the permissions grant, and this
-# repo's variable/secret spellings passed down as inputs.
-#
-# DARK UNTIL PROVISIONED: this lane reads this repo's own Codex
-# subscription credential (auth.json lineage) from GCP Secret Manager
-# through workload identity. It stays dark until the orchestrating
-# session provisions the GCP vars below and a maintainer mints an
-# INDEPENDENT credential for this repo (`codex login` -- never copy
-# another repository's blob: Codex rotates the credential on every run
-# and the lane writes the new one back, so two repos sharing one lineage
-# invalidate each other).
-
-# Keep the console's leading issue-number join key and add the immutable
-# broker marker used for interrupted-bind reconciliation.
 run-name: '#${{ inputs.issue }}: Codex issue agent [dispatch:g${{ inputs.broker_generation }}:${{ inputs.broker_intent_id }}]'
 
 on:
@@ -59,9 +34,6 @@ on:
         description: 'Immutable broker dispatch token'
         required: true
 
-# Least privilege: enough to comment, push a feature branch, and open a
-# PR. id-token: write is what lets the lane mint a WIF token for the GCP
-# project that holds the subscription credential.
 permissions:
   contents: write
   issues: write
@@ -71,18 +43,10 @@ permissions:
 
 jobs:
   codex:
-    # The central orchestrator authorizes the request before dispatching
-    # this worker.
     if: github.event_name == 'workflow_dispatch' && inputs.issue != ''
-    # Serialize every subscription-authenticated run in this repository:
-    # two agents must never rotate the same auth.json refresh token
-    # concurrently. Job-level on purpose (fleet convention).
     concurrency:
       group: codex-subscription-auth
       cancel-in-progress: false
-    # @main, not a SHA/tag: agent-lcars's convention for every cross-repo
-    # reference to a published action/workflow from that repo (see its
-    # docs/published-actions.md).
     uses: jlapenna/agent-lcars/.github/workflows/agent-lane-codex.yml@main # latest
     with:
       issue: ${{ inputs.issue }}
@@ -92,29 +56,12 @@ jobs:
       context: ${{ inputs.context }}
       broker-generation: ${{ inputs.broker_generation }}
       broker-intent-id: ${{ inputs.broker_intent_id }}
-      # Dedicated long-session agent pool (arrives with this repo's
-      # homelab autoscaler scale set, agent-lcars#1325); agent sessions
-      # must never share a short CI/glue pool.
       runs-on-label: ${{ vars.AGENT_RUNNER_LABEL }}
-      # 90/60: fleet-standard job backstop and agent-step timeout,
-      # matching claude.yml/opencode.yml and the console's
-      # RUN_TIMEOUT_MINUTES (agent-lcars#51/#129).
       job-timeout-minutes: 90
       agent-timeout-minutes: 60
-      # Consumer defaults are this repo's behavior: no dispatch-bootstrap,
-      # no protected snapshot, no queue-drain (this repo's admission rate
-      # never queues deep enough to need it), no cross-project GCP access
-      # preflight, no Nx remote cache, and no pnpm store override.
-      #
-      # Two distinct GCP identities, deliberately kept separate:
-      #   codex agent SA (here)    -- read AND add versions of this
-      #                               repo's subscription credential
-      #   telemetry-writer (below) -- write session telemetry only
       gcp-workload-identity-provider: ${{ vars.GCP_WIF_PROVIDER }}
       gcp-service-account: ${{ vars.GCP_CODEX_AGENT_SA }}
       gcp-project-id: ${{ vars.GCP_PROJECT_ID }}
-      # This repo's OWN auth.json lineage (see the header comment -- never
-      # populate it from another repository's blob).
       codex-auth-secret-name: NX_CACHE_SERVER_CODEX_AUTH_JSON
       telemetry-workload-identity-provider: ${{ vars.GCP_WIF_PROVIDER }}
       telemetry-service-account: ${{ vars.GCP_TELEMETRY_WRITER_SA }}
@@ -122,15 +69,7 @@ jobs:
       agent-lcars-client-id: ${{ vars.AGENT_LCARS_CLIENT_ID }}
     secrets:
       AGENT_LCARS_PRIVATE_KEY: ${{ secrets.AGENT_LCARS_PRIVATE_KEY }}
-      # NX_CACHE_TOKEN and AGENT_CI_RERUN_TOKEN are optional in the lane
-      # and deliberately unset here: this repo has no Nx remote cache, and
-      # consumers hand the agent the job token for CI reruns instead of a
-      # separate PAT.
 
-  # Central-orchestrator completion callback: calls agent-lcars's shared
-  # reusable finalizer cross-repo (the shared-finalizer topology,
-  # agent-lcars#1191). Always runs: the central orchestrator is this
-  # repo's only dispatcher.
   fallback-finalize:
     needs: codex
     if: always() && github.event_name == 'workflow_dispatch' && inputs.issue != ''

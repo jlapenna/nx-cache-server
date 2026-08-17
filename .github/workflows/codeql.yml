@@ -1,15 +1,5 @@
 name: CodeQL
 
-# Thin caller of agent-lcars's fleet-published codeql-reusable.yml
-# (agent-lcars#1340 A-R6 -- see agent-lcars's docs/published-actions.md).
-# This caller owns what workflow_call cannot carry: the triggers
-# (including this repo's weekly cron, staggered from agent-lcars's) and
-# the permission grant; the analyze steps -- and the reasoning for their
-# unconditional ubuntu-latest runner -- live in the reusable. The
-# check-run name changes from "Analyze JavaScript" to
-# "analyze / Analyze (javascript-typescript)"; the ruleset's required
-# check is ci.yml's "verify", so nothing gates on the old name.
-
 on:
   pull_request:
   push:
