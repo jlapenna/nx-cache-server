@@ -14,11 +14,14 @@ name: Claude Issue Agent
 # contract-tested run-name, the permissions grant, and this repo's
 # variable/secret spellings passed down as inputs.
 #
-# DARK UNTIL PROVISIONED: this lane needs this repo's own
-# CLAUDE_CODE_OAUTH_TOKEN secret, which only the maintainer can mint
-# (interactive `claude setup-token`; not recoverable from another repo's
-# secret -- agent-lcars#1325). The codex/opencode lanes carry the load
-# until then.
+# NO PER-REPO CLAUDE CREDENTIAL: this lane used to be dark until the
+# maintainer minted this repo's own CLAUDE_CODE_OAUTH_TOKEN secret. Since
+# agent-lcars#1350 no repo carries a copy -- the lane reads the fleet's one
+# canonical token from Secret Manager at run time over WIF (an access token
+# minted for claude-token-reader@agent-lcars, then a direct Secret Manager
+# read; agent-lcars#1370). All this repo supplies is the `id-token: write`
+# grant below and membership in the shared `github` pool's allowlist
+# (agent-lcars's infra/terraform/main.tf).
 
 # Keep the console's leading issue-number join key and add the immutable
 # broker marker used to reconcile a dispatch after an interrupted bind.
