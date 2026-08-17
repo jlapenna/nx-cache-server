@@ -41,3 +41,7 @@ concurrency:
 jobs:
   validate:
     uses: jlapenna/agent-lcars/.github/workflows/repo-validation.yml@main # latest
+    with:
+      # Also check .github/canonical-sync.conf: the files this repo copies
+      # verbatim from agent-lcars (agent-lcars#1340 B8).
+      canonical-sync: true
