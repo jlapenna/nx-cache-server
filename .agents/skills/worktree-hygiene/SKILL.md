@@ -37,16 +37,16 @@ the shared read-only base is expected.
 
 ## Detecting concurrent sessions: don't trust tmux panes alone
 
-`tmux list-panes -a` only enumerates *current* panes. Closing a pane does
+`tmux list-panes -a` only enumerates _current_ panes. Closing a pane does
 not reliably kill the process tree under it — `bash` (and its `claude` or
 `codex` child) can survive the pane's teardown as an orphan, still holding
 the old cwd, invisible to tmux. The authoritative check is a `/proc` scan:
 
 ```bash
-scripts/scan-live-processes.sh <repo-or-worktree-path>
+fleet-scan-live-processes <repo-or-worktree-path>
 ```
 
-If more than one *other* session shows a `cwd` under the path you're about
+If more than one _other_ session shows a `cwd` under the path you're about
 to mutate, do not edit or commit there directly — worktree it. Re-run the
 scan immediately before acting, not just once at the start of a session:
 state can change between listing and mutating.
@@ -54,8 +54,8 @@ state can change between listing and mutating.
 ## Worktree names can collide
 
 A descriptive worktree/branch name is often the obvious slug of the task at
-hand — which means two independent sessions can pick the *exact same name*
-for the *exact same request* ("make admin pages mobile friendly" ->
+hand — which means two independent sessions can pick the _exact same name_
+for the _exact same request_ ("make admin pages mobile friendly" ->
 `admin-mobile-friendly` twice). A tool reporting "created" a worktree is not
 proof of exclusive ownership. After entering any worktree — freshly created
 or not — run `git status` / `git log` and the `/proc` scan above before
@@ -88,10 +88,10 @@ worktree can carry its own installed dependencies and build output, so this
 adds up fast.
 
 Before running `git worktree remove`, work through this checklist — a
-`git status` that reads clean right now is *not* sufficient on its own:
+`git status` that reads clean right now is _not_ sufficient on its own:
 
 1. **Confirm the branch's work actually landed.** Don't trust `git
-   merge-base --is-ancestor <branch> main` alone — it false-negatives on
+merge-base --is-ancestor <branch> main` alone — it false-negatives on
    every squash merge (see the `stale-branch-cleanup` skill for the full
    recipe: find the squash commit, diff content, don't just trust "not an
    ancestor" as "not merged").
@@ -113,14 +113,14 @@ Before running `git worktree remove`, work through this checklist — a
 4. **A "locked" entry with a dead PID is not the same as safe to delete.**
    `git worktree list` can show `locked ... (pid N)` where `ps -p N` proves
    the process is long dead — but the worktree can still hold 100s of lines
-   of real uncommitted diff (a crashed session's WIP that exists *only* on
+   of real uncommitted diff (a crashed session's WIP that exists _only_ on
    disk, never committed). Check `git status --porcelain` regardless of
    lock state; if it's dirty, don't delete — report the path, branch, and
    diff stat, and check whether it matches a still-open issue/PR before
    deciding.
 5. **Remove it:**
    ```bash
-   scripts/safe-remove-worktree.sh <worktree-path>
+   fleet-safe-remove-worktree <worktree-path>
    ```
    The helper resolves the target worktree's own Git common directory, so it
    is safe to invoke from a different repository; inspect the exact removal
@@ -129,7 +129,7 @@ Before running `git worktree remove`, work through this checklist — a
    after you've personally reviewed what it flagged. If plain removal reports "cannot remove a
    locked working tree" from a harness-owned agent-session lock, confirm
    the locking PID is actually dead first, then `git worktree remove
-   <path> --force --force` (twice) — never do this for a worktree you know
+<path> --force --force` (twice) — never do this for a worktree you know
    is still in active use. If a previous removal left the directory but
    removed its `.git` link, the helper identifies it as a **partially removed
    linked worktree** (not the primary checkout), refuses by default, and can
@@ -137,9 +137,9 @@ Before running `git worktree remove`, work through this checklist — a
    immediate sibling (for example, a centralized `worktrees/` directory),
    identify it explicitly with `--git-dir <owning-checkout-or-git-dir>`:
    ```bash
-   scripts/safe-remove-worktree.sh <worktree-path> --force-anyway --dry-run
-   scripts/safe-remove-worktree.sh <worktree-path> --force-anyway
-   scripts/safe-remove-worktree.sh <worktree-path> --git-dir <owner> --force-anyway --dry-run
+   fleet-safe-remove-worktree <worktree-path> --force-anyway --dry-run
+   fleet-safe-remove-worktree <worktree-path> --force-anyway
+   fleet-safe-remove-worktree <worktree-path> --git-dir <owner> --force-anyway --dry-run
    ```
    That recovery identifies only the target's administrative record, restores
    its missing `.git` link, and asks `git worktree remove` to remove that
@@ -156,7 +156,7 @@ Before running `git worktree remove`, work through this checklist — a
    cleanup; the immediately following worktree removal deletes it. If removal
    fails, the safe `.git-recovery-*` link remains for inspection.
 6. **Orphaned directories** (no `.git/worktrees/<name>/` admin entry, `git
-   worktree list` doesn't mention them, but the directory is still on
+worktree list` doesn't mention them, but the directory is still on
    disk — usually a prior `git worktree remove` that partially failed) are
    safe to `rm -rf` directly once you've confirmed: no live process (step 2
    above), no matching local/remote branch, no matching open PR. If
