@@ -107,7 +107,6 @@ jobs:
       # ambient GCP for the agent, no queue-drain, no Nx remote cache, and
       # no pnpm store override.
       agent-fleet-login: ${{ vars.AGENT_FLEET_LOGIN }}
-      maintainer-login: ${{ vars.MAINTAINER_LOGIN }}
       agent-lcars-client-id: ${{ vars.AGENT_LCARS_CLIENT_ID }}
       # Telemetry sidecar (live turns/tokens in the Agent LCARS console),
       # through the fleet-shared write-only telemetry-writer identity. An
@@ -183,8 +182,6 @@ jobs:
       dispatch-token: ${{ inputs.broker_dispatch_token }}
       worker-workflow: claude.yml
       worker-result: ${{ needs.claude.result }}
-      mode: ${{ inputs.mode }}
-      runbook: ${{ inputs.runbook }}
       agent: Claude
       fleet-login: ${{ vars.AGENT_FLEET_LOGIN }}
       maintainer: ${{ vars.MAINTAINER_LOGIN }}
