@@ -18,6 +18,7 @@ test -x .husky/_/pre-push
 # thin, idempotent loader and deliberately does not copy the skill body.
 if command -v codex >/dev/null 2>&1; then
   codex plugin marketplace add jlapenna/repo-tools --ref main >/dev/null
+  codex plugin marketplace upgrade repo-tools >/dev/null
   codex plugin add repo-tools@repo-tools >/dev/null
 fi
 echo "Worktree ready."
