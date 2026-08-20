@@ -16,5 +16,3 @@ concurrency:
 jobs:
   validate:
     uses: jlapenna/agent-lcars/.github/workflows/repo-validation.yml@main # latest
-    with:
-      canonical-sync: true
