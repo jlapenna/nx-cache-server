@@ -21,3 +21,8 @@ contracts.
 
 The worktree rules above are this repo's own, and they apply to dispatched
 agents too.
+
+The authoritative worktree-safety guidance is the `worktree-hygiene` skill in
+the public [`jlapenna/repo-tools`](https://github.com/jlapenna/repo-tools)
+Codex plugin. Do not mirror its body locally; use its `repo-*` commands and
+follow that source in other runtimes.

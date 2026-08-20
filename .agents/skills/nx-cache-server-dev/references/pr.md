@@ -20,14 +20,14 @@ Squash-merge through protection when `verify` passes and all actionable threads
 are resolved. Confirm `gh pr view --json state,mergedAt,mergeCommit` reports an
 actual merge. Do not deploy; Homelab owns rollout.
 
-Finally, follow the bundled `worktree-hygiene` skill: prove squash-tree
+Finally, follow the public `repo-tools` plugin's `worktree-hygiene` skill: prove squash-tree
 equivalence, require a clean worktree, scan for live processes, then dry-run and
 run the repository-local helper:
 
 ```bash
-fleet-safe-remove-worktree \
+repo-safe-remove-worktree \
   <worktree-path> --dry-run
-fleet-safe-remove-worktree <worktree-path>
+repo-safe-remove-worktree <worktree-path>
 ```
 
 Delete only the exact merged branch, then fast-forward the clean primary
