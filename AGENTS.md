@@ -14,10 +14,10 @@ implementation and commits use a linked worktree initialized by
 
 This repository is a member of the Agent LCARS fleet (onboarded in
 jlapenna/agent-lcars#1325). The fleet's own conventions live in that repo
-and are deliberately not restated here: read
-`.agents/skills/agent-protocol/` for how a dispatched agent behaves, and
-its `docs/` for the dispatch, credential, and published-workflow
-contracts.
+and are deliberately not restated here. Headless dispatches read the exact
+shared contract from the file exported as `$AGENT_PROTOCOL_PATH`; interactive
+authors can consult Agent LCARS's `docs/` for dispatch, credential, and
+published-workflow contracts. Do not copy the shared protocol into this repo.
 
 The worktree rules above are this repo's own, and they apply to dispatched
 agents too.
