@@ -10,6 +10,13 @@ on:
 permissions:
   contents: read
 
+# CodeQL's reusable workflow deliberately leaves callers responsible for
+# concurrency. Keep only the newest PR analysis while retaining scheduled and
+# main-branch scans.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   analyze:
     uses: jlapenna/agent-lcars/.github/workflows/codeql-reusable.yml@main # latest
