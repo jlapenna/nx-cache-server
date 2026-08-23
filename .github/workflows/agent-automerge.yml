@@ -19,6 +19,12 @@ permissions:
   issues: write
   pull-requests: write
 
+# PR events supersede an earlier auto-merge evaluation for the same pull
+# request. Recovery workflow-runs and the periodic sweep remain independent.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.id || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_review' }}
+
 jobs:
   automerge:
     uses: jlapenna/agent-lcars/.github/workflows/agent-automerge-reusable.yml@main # latest
