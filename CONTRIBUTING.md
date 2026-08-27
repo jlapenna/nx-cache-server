@@ -8,8 +8,8 @@ worktree for edits, then run `./tools/setup-worktree.sh` there. Use
 
 Codex and Claude sessions use the repository hook configuration in
 `.codex/hooks.json` and `.claude/settings.json`. Commands using `gh issue view`
-or `gh issue edit` are checked for the `jclaw-bot` issue claim and matching
-tmux title before hands-on work continues.
+or `gh issue edit` are checked for the `agent-lcars-bot` issue claim and
+matching tmux title before hands-on work continues.
 
 The active GitHub `Protect main` ruleset requires the `verify` check, pull
 requests with resolved review threads, linear history, and disallows force
