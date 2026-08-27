@@ -8,6 +8,10 @@ on:
       issue:
         description: 'Issue number to run against (manual testing)'
         required: true
+      work:
+        description: 'Opaque work-item payload from the Agent LCARS control plane'
+        required: false
+        default: ''
       mode:
         description: 'Dispatch mode for router-triggered issue work'
         required: false
@@ -47,6 +51,8 @@ jobs:
     uses: jlapenna/agent-lcars/.github/workflows/agent-lane-claude.yml@main # latest
     with:
       issue: ${{ inputs.issue }}
+      work: ${{ inputs.work }}
+      control-plane-projections: true
       mode: ${{ inputs.mode }}
       reply: ${{ inputs.reply }}
       runbook: ${{ inputs.runbook }}
