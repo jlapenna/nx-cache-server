@@ -55,7 +55,7 @@ jobs:
     with:
       issue: ${{ inputs.issue }}
       work: ${{ inputs.work }}
-      control-plane-projections: true
+      control-plane-projections: ${{ inputs.broker_intent_id != '' }}
       mode: ${{ inputs.mode }}
       reply: ${{ inputs.reply }}
       runbook: ${{ inputs.runbook }}
