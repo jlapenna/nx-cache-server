@@ -2,3 +2,7 @@
 data/
 node_modules/
 .nx/
+
+# Credentials
+gha-creds-*.json
+.default-application-service-account.json
