@@ -9,7 +9,7 @@
       "command": "node --check apps/nx-cache-server/server.js && bash -n apps/nx-cache-server/canary.sh"
     },
     "test": {
-      "command": "node --test apps/nx-cache-server/server.test.js"
+      "command": "node --test apps/nx-cache-server/server.test.js && tools/workflow-anchor-gates.test.sh"
     },
     "container": {
       "command": "docker build --tag nx-cache-server:local apps/nx-cache-server",
