@@ -15,6 +15,7 @@
     "verify": "nx run-many -t lint,test --projects=nx-cache-server"
   },
   "devDependencies": {
+    "@jlapenna/repo-tools": "github:jlapenna/repo-tools#main",
     "husky": "^9.1.7",
     "nx": "23.1.1"
   },
