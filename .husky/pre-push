@@ -1,3 +1,4 @@
 #!/usr/bin/env sh
-if command -v repo-require-worktree >/dev/null 2>&1; then repo-require-worktree; fi
+refs="$(cat)"
+printf '%s\n' "$refs" | repo-require-worktree pushes
 npx nx run nx-cache-server:lint
