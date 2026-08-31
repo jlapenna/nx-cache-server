@@ -31,7 +31,7 @@ jobs:
     with:
       bot-logins: ${{ vars.AGENT_BOT_LOGINS }}
       fleet-login: ${{ vars.AGENT_FLEET_LOGIN }}
-      runs-on: '["ubuntu-latest"]'
+      runs-on: '["nx-cache-server-default"]'
       required-checks: '["verify"]'
       ci-workflow: ci.yml
       extra-main-workflows: '[]'
