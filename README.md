@@ -118,7 +118,7 @@ gauges, prune eviction/error counters, and the server start time. Cache hashes,
 paths, token names, and token values are never emitted as metric labels.
 
 The included homelab configuration scrapes
-`spark.lan.jlapenna.net:3123/metrics` every 15 seconds with the
+`picard.lan.jlapenna.net:3123/metrics` (clients use the `nx-cache.lan.jlapenna.net` role alias) every 15 seconds with the
 `nx-cache-server` job.
 
 ## Development and test
