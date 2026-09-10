@@ -20,14 +20,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run verify
-      - run: docker compose config -q
-      - run: docker build --tag nx-cache-server:ci apps/nx-cache-server
-      - run: >-
-          docker run --rm --entrypoint /bin/sh nx-cache-server:ci -c
-          'test -r /app/server.js && test "$(stat -c %U:%G /app/server.js)" = node:node'
+      - name: Run native verification and artifact checks
+        env:
+          VERIFY_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: npx --no-install repo-verify --base "$VERIFY_BASE" --head "$GITHUB_SHA" --check native --check compose --check image --check ownership --run
