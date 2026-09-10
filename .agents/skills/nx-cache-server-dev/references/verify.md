@@ -1,24 +1,20 @@
 # Verification
 
-After `./tools/setup-worktree.sh`, use the shared executable plan:
+Run the same core gate documented for contributors:
 
 ```bash
-npx --no-install repo-verify --base origin/main
-npx --no-install repo-verify --base origin/main --run
+npm run verify
+docker compose config -q
 ```
 
-[The plan](../../../../.repo/verify.json) owns the same native Nx, Compose,
-container build, and ownership checks used by CI. It does not skip them for
-documentation changes. The shared validation workflow consumes its `docs` and
-`workflows` checks. Docker must be available; this builds a local test image,
-not a production deployment.
+For container or ownership changes, also run:
 
-For iteration, select a check with `--check native`. Full verification remains
-required before completion. CI passes immutable refs; local selection includes
-uncommitted and untracked changes. Failures and unavailable bases stop the run.
+```bash
+docker build --tag nx-cache-server:local apps/nx-cache-server
+docker run --rm --entrypoint /bin/sh nx-cache-server:local -c \
+  'test -r /app/server.js && test "$(stat -c %U:%G /app/server.js)" = node:node'
+```
 
-[Interfaces](../../../../docs/interfaces.md) are generated with
-`npx --no-install repo-docs generate --output docs/interfaces.md`. Documentation
-contracts reject drift, malformed skill frontmatter, and broken literal local
-file links in changed Markdown; they do not verify URLs or heading anchors.
-Review the diff for credentials or cache data and run `git diff --check`.
+Use focused targets while iterating (`npm run lint`, `npm test`, or the
+relevant Nx target), but do not substitute them for the final gate. Confirm
+`git diff --check` and that no secret or cache data entered the diff.
