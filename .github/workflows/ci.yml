@@ -24,6 +24,22 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      # package.json pins npm through `packageManager`, but the runner image
+      # ships its own npm and nothing here was activating the pin: every
+      # `npm ci` below ran on the runner's bundled npm instead. The npm 12
+      # bump (#56) went green that way while a real npm 12 run failed
+      # locally (EALLOWGIT on the repo's own git dependency), so this check
+      # was passing for the wrong reason. Enable corepack and assert the
+      # version actually in use matches the pin, so it cannot drift back.
+      - name: Activate the pinned npm and prove it is in use
+        run: |
+          set -euo pipefail
+          corepack enable
+          pinned="$(node -p "require('./package.json').packageManager")"
+          want="${pinned#npm@}"
+          got="$(npm --version)"
+          echo "packageManager=$pinned npm in PATH=$got"
+          test "$got" = "$want"
       - run: npm ci
       - run: npm run verify
       - run: docker compose config -q
