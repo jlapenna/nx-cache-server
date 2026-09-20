@@ -1,22 +1,25 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
-    "helpers:pinGitHubActionDigests"
+    "github>jlapenna/agent-lcars//renovate-preset",
+    "monorepo:nx"
   ],
-  "rangeStrategy": "pin",
   "packageRules": [
     {
-      "matchManagers": [
-        "github-actions"
-      ],
-      "groupName": "GitHub Actions"
+      "description": "Container image major version bumps (for example a Node major) can change runtime behavior; hold them for manual review instead of auto-merging.",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false
     },
     {
-      "matchManagers": [
-        "npm"
-      ],
-      "groupName": "npm development dependencies"
+      "description": "nx-cache-server:latest (docker-compose.yml) is this repo's own image, built locally from apps/nx-cache-server/Dockerfile via docker-compose's build: field, not published to any registry Renovate can query; exclude it the way the fleet preset excludes other locally-built/LAN-only images.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["nx-cache-server"],
+      "enabled": false
     }
-  ]
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["bot:renovate", "type:security"]
+  }
 }
