@@ -7,7 +7,7 @@
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "npm@11.16.0",
+  "packageManager": "npm@11.19.1",
   "scripts": {
     "prepare": "husky",
     "lint": "nx run nx-cache-server:lint",
@@ -17,9 +17,9 @@
   "devDependencies": {
     "@jlapenna/repo-tools": "github:jlapenna/repo-tools#main",
     "husky": "^9.1.7",
-    "nx": "23.1.1"
+    "nx": "23.2.1"
   },
   "overrides": {
-    "brace-expansion": "5.0.9"
+    "brace-expansion": "5.0.12"
   }
 }
