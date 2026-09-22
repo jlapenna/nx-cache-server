@@ -7,8 +7,8 @@ scheduled drift check.
 
 The root is self-contained so fork pull requests can initialize and validate
 it without access to another private fleet repository. Do not run an
-unconfigured local apply. Until the reviewed state handoff completes,
-Homelab's central module remains authoritative for the live ruleset.
+unconfigured local apply. Ruleset `20724994` is imported into this root's
+isolated state; Homelab no longer carries the resource in its central state.
 
 Repository CI initializes, formats, validates, and checks this root's local
 contract. Only the centralized executor receives backend and state access.
