@@ -12,7 +12,8 @@
     "prepare": "husky",
     "lint": "nx run nx-cache-server:lint",
     "test": "nx run nx-cache-server:test",
-    "verify": "nx run-many -t lint,test --projects=nx-cache-server"
+    "verify": "nx run-many -t lint,test --projects=nx-cache-server && npm run verify:ruleset",
+    "verify:ruleset": "./tools/github-ruleset-root.test.sh"
   },
   "devDependencies": {
     "@jlapenna/repo-tools": "github:jlapenna/repo-tools#main",
