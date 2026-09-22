@@ -31,6 +31,9 @@ checkout stays clean on `main`.
 3. Review status, `git diff --check`, and the full diff; commit with hooks.
 4. Follow [references/pr.md](references/pr.md) through merge and cleanup.
 
-The active `Protect main` ruleset is managed by Homelab Terraform. It requires
-the `verify` check, resolved review threads, linear history, and disallows
-force-pushes or protected-branch deletion.
+The active `Protect main` ruleset is declared in this repository's
+`infra/github-ruleset` root. Homelab supplies its trusted credentials,
+isolated backend configuration, approved execution path, and scheduled drift
+check. The ruleset requires `verify` and `validate / repository validation`,
+resolved review threads, linear history, and disallows force-pushes or
+protected-branch deletion.

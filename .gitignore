@@ -2,6 +2,7 @@
 data/
 node_modules/
 .nx/
+**/.terraform/*
 
 # Credentials
 gha-creds-*.json

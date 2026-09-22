@@ -146,6 +146,16 @@ npx nx run nx-cache-server:container
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
+## GitHub ruleset
+
+The repository's `Protect main` policy is declared in
+[`infra/github-ruleset`](infra/github-ruleset/). It is intentionally separate
+from application infrastructure and contains no credentials or backend
+location. Homelab retains the trusted GitHub and GCP identities, supplies this
+root's isolated GCS state prefix, and runs approved plans plus scheduled drift
+checks. Repository CI initializes and validates the root without reading live
+state.
+
 ## Optional integrity canary
 
 `canary.sh` verifies a deployed cache's write, read-only read, read-only
