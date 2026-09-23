@@ -68,6 +68,9 @@ resource "github_repository_ruleset" "protect_main" {
       required_check {
         context = "verify"
       }
+      required_check {
+        context = "repository-owned Terraform"
+      }
     }
   }
 }
