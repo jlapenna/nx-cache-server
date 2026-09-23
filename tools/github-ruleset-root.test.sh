@@ -10,6 +10,7 @@ grep -Fqx '  owner = "jlapenna"' "$config"
 grep -Fqx '  repository  = "nx-cache-server"' "$config"
 grep -Fqx '        context = "validate / repository validation"' "$config"
 grep -Fqx '        context = "verify"' "$config"
+grep -Fqx '        context = "repository-owned Terraform"' "$config"
 if grep -Fq 'source = "git::https://github.com/jlapenna/homelab.git' "$config"; then
   echo "github-ruleset root must not import Homelab source" >&2
   exit 1

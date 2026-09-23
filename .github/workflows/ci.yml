@@ -45,18 +45,26 @@ jobs:
           got="$(npm --version)"
           echo "packageManager=$pinned npm in PATH=$got"
           test "$got" = "$want"
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: v1.16.3
       - run: npm ci
       - run: npm run verify
-      - name: Verify repository-owned Terraform
-        run: |
-          terraform -chdir=infra/github-ruleset init -backend=false -input=false -lockfile=readonly
-          terraform -chdir=infra/github-ruleset fmt -check -recursive
-          terraform -chdir=infra/github-ruleset validate
       - run: docker compose config -q
       - run: docker build --tag nx-cache-server:ci apps/nx-cache-server
       - run: >-
           docker run --rm --entrypoint /bin/sh nx-cache-server:ci -c
           'test -r /app/server.js && test "$(stat -c %U:%G /app/server.js)" = node:node'
+
+  terraform:
+    name: repository-owned Terraform
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: v1.16.3
+      - name: Verify repository-owned Terraform
+        run: |
+          ./tools/github-ruleset-root.test.sh
+          terraform -chdir=infra/github-ruleset init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=infra/github-ruleset fmt -check -recursive
+          terraform -chdir=infra/github-ruleset validate
