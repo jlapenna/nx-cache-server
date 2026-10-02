@@ -14,6 +14,8 @@ integrity canary.
 
 The service is a first-class Nx application at `apps/nx-cache-server`; its
 source, tests, container definition, and project configuration live together.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for ownership boundaries and the proof
+model, and [docs/README.md](docs/README.md) for the documentation index.
 
 ## Quick start
 
