@@ -58,6 +58,11 @@ publisher, deployed digest, secret delivery, service configuration, canary,
 and rollback. If production desired state changes, make that change in
 Homelab and use its approval and verification path.
 
+After CI passes on a push to `main`, `.github/workflows/homelab-rollout.yml`
+notifies Homelab, which then runs its own reviewed reconciler for latest
+`main` instead of polling this repository. The request carries no deployment
+authority of its own: it can only start that reconciler.
+
 ## Proof Ladder
 
 Use the cheapest useful evidence while iterating, then run the complete gate:
