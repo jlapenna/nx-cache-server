@@ -1,0 +1,7 @@
+# This repo's homelab runner scale-set label. Declaring it lets actionlint
+# accept it, and makes agent-lcars' repo-validation.yml reject any job that
+# pairs it with `self-hosted`: a scale set matches only its own name, so
+# that combination never schedules.
+self-hosted-runner:
+  labels:
+    - nx-cache-server-default
