@@ -58,10 +58,12 @@ publisher, deployed digest, secret delivery, service configuration, canary,
 and rollback. If production desired state changes, make that change in
 Homelab and use its approval and verification path.
 
-After CI passes on a push to `main`, `.github/workflows/homelab-rollout.yml`
-notifies Homelab, which then runs its own reviewed reconciler for latest
-`main` instead of polling this repository. The request carries no deployment
-authority of its own: it can only start that reconciler.
+Nothing in this repository notifies Homelab, and source changes do not
+reach production immediately: Homelab and Agent LCARS are separate systems,
+so no workflow here uses the Agent LCARS App to dispatch Homelab. Homelab
+delivers `main` on its own daily backstop, when it applies new configuration,
+or when the maintainer runs
+`gh workflow run source-reconcile.yml -R jlapenna/homelab -f source=nx-cache-server`.
 
 ## Proof Ladder
 
