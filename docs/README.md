@@ -21,3 +21,9 @@ Runtime behavior belongs beside the service in `apps/nx-cache-server/`:
 
 When adding durable documentation, link it here. Keep commands and procedures
 in their owning guide rather than duplicating them in `AGENTS.md`.
+
+## Harness maintenance
+
+The [nx-cache-server-dev skill](../.agents/skills/nx-cache-server-dev/SKILL.md) owns local
+harness upkeep, source boundaries and proof limits. Follow its existing
+verification and delivery references when refreshing documentation or skills.

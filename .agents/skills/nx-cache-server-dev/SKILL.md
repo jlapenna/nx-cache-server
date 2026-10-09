@@ -37,3 +37,22 @@ isolated backend configuration, approved execution path, and scheduled drift
 check. The ruleset requires `verify`, `validate / repository validation`, and
 `repository-owned Terraform`, resolved review threads, linear history, and
 disallows force-pushes or protected-branch deletion.
+
+## Harness and documentation upkeep
+
+Use the [shared harness-maintenance workflow](https://github.com/jlapenna/repo-tools/blob/main/plugins/repo-tools/skills/harness-maintenance/SKILL.md), adapted from
+[Ryan Lopopolo's field guide](https://github.com/lopopolo/harness-engineering/tree/226c8d35fb6ea3ed55467753dba6dea2b5fd5778). Start with the observed missed
+decision, corroborate the failure and repair its earliest authoritative owner.
+Keep repository domain facts here and general maintenance procedures shared.
+
+`server.js` and its tests own the GET/HEAD/PUT and authentication contract.
+Immutable cache publication belongs in its atomic server operation; avoid
+parallel prose or UI authorities. A health request does not prove a cache hit
+or safe concurrent publication. Native `npm run verify` and compose validation
+prove local source contracts; Homelab owns image references and live rollout.
+
+Keep root context a task router and retrieve conditional procedures through
+skill references. Preserve dated history separately from current contracts.
+Validate links, frontmatter, formatting and source consistency; those checks
+do not establish better agent outcomes. Compare fresh use under comparable
+model, tools and authority before making an effectiveness claim.
