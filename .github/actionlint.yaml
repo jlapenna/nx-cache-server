@@ -4,4 +4,4 @@
 # that combination never schedules.
 self-hosted-runner:
   labels:
-    - nx-cache-server-default
+    - nx-cache-server-ci
