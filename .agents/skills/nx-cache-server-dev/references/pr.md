@@ -24,48 +24,25 @@ deploy; Homelab owns rollout.
 
 ## Task-end cleanup
 
-Cleanup of your own task checkout is mandatory when the task ends, including
-failed, blocked, and unmerged work. The shared `worktree-hygiene` skill owns the
-procedure and real safety guards; use the appropriate authorized route below.
+Cleanup of your own task checkout is mandatory whenever the task ends,
+including failed, blocked, and unmerged work. Follow the **current shared
+[worktree-hygiene skill](https://github.com/jlapenna/repo-tools/blob/main/plugins/repo-tools/skills/worktree-hygiene/SKILL.md)**
+for tool provenance, cleanup commands, authorized recovery and real safety
+refusals. Standalone branch cleanup follows the current `stale-branch-cleanup`
+skill at `~/.agents/skills/stale-branch-cleanup/SKILL.md`. Keep those mechanics
+in their shared owners rather than copying them here.
 
-1. Retain the absolute primary and target paths, exact branch and HEAD, and any
-   recovery references. Stop your own watchers, servers, and failed workers.
-   Move outside the target before cleanup. **For exec tools, set an outside
-   `workdir` on every call**; a previous shell's `cd` does not persist. Shell
-   examples independently change directory too. An own caller or parent cwd is
-   a condition to fix, not a reason to abandon cleanup; genuine foreign
-   processes, locks, configuration, operation, and resource guards remain KEEP.
-2. Select the current managed CLI at `$HOME/.local/bin`, outside the target.
-   Verify its actual shim target and helper bytes against a reviewed release
-   containing repo-tools PR #149's caller-aware safety fixes (v2.0.10 or a
-   verified successor). PATH lookup, a shared skill link, or the package's
-   internal version alone does not prove provenance. If that managed tool is
-   unavailable or unverifiable, retain the target with that exact blocker;
-   do not silently choose a repo-local dependency.
-3. For a merged task, run the shared evidence-backed audit and then apply it:
+Stop your own watchers, servers, and failed workers. Move outside the target;
+**set an outside `workdir` on every cleanup exec-tool call**. A previous shell's
+`cd` does not persist. Fix an own caller or parent cwd instead of leaving the
+checkout behind; preserve genuine foreign-process and other safety guards.
+Preserve unmerged work through its authorized recovery route and never label
+it merged.
 
-   ```bash
-   (cd / && "$HOME/.local/bin/repo-prune-merged-worktrees" --repo <absolute-primary-path> --base origin/main --fetch <absolute-worktree-path>)
-   (cd / && "$HOME/.local/bin/repo-prune-merged-worktrees" --repo <absolute-primary-path> --base origin/main --fetch --delete <absolute-worktree-path>)
-   ```
-
-   Keep any repository-documented consumer resource adapter in both calls.
-   Investigate the precise KEEP reason; never force past it or kill another
-   session. The audit and apply must bind the same target and exact task head.
-4. Failed, blocked, or unmerged work is not merged cleanup. Use the current
-   shared, explicitly authorized own-task recovery/parking workflow, preserving
-   exact history, raw index, staged objects, private working files and their
-   absences before removal. Preserve its branch and protected recovery refs;
-   do not delete them as though merged. Respect dirty, live, locked, nested,
-   unsupported-index, and other real refusals. A standing creation-age grant
-   uses reliable Git-link birth time, not commit age or a weakened inactivity
-   window; it does not waive guards or automatically cover a young checkout.
-5. Verify both the actual filesystem path and its Git worktree registration
-   are absent. Record the intended local and named remote branch outcome;
-   use the qualified managed `repo-audit-branches` for a merged task's named
-   remote audit, never a broad deletion. Keep private recovery receipts and
-   remove only your own disposable worker/cache scratch. Fast-forward a clean
-   primary already on `main` and verify it equals `origin/main`; preserve any
-   unrelated work. A primary synchronization blocker is separate from own
-   checkout removal. If a real guard retains the checkout, report its exact
-   path and reason rather than claiming cleanup succeeded.
+Verify both filesystem-path and Git-registration absence, and record the
+branch outcome under the shared procedure. If a real guard retains a checkout,
+report its exact path and reason instead of claiming successful cleanup.
+Fast-forward the verified clean primary already on `main` until it equals
+`origin/main`; preserve unrelated work and never switch another session's
+checkout. A primary synchronization blocker is separate from own checkout
+removal.

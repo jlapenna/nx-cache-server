@@ -20,8 +20,9 @@ checkout stays clean on `main`.
 - Security-sensitive changes to authentication, cache publication, paths, or
   credentials require focused regression coverage and an explicit PR summary.
 - Finish cleanup of your own task checkout whenever the task ends, including
-  failed, blocked, and unmerged work. Follow the [task-end cleanup procedure](references/pr.md#task-end-cleanup); preserve recovery state and respect real
-  refusals. Set an outside working directory on every cleanup exec-tool call.
+  failed, blocked, and unmerged work. Follow the
+  [task-end cleanup obligations](references/pr.md#task-end-cleanup) and current
+  shared procedures; set an outside `workdir` on every cleanup exec-tool call.
 - Opening a PR authorizes the originating session to carry it through current-
   head CI, actionable review, protected squash merge, and safe cleanup. Never
   bypass protection or force-push.
