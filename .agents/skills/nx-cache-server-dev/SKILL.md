@@ -19,6 +19,10 @@ checkout stays clean on `main`.
   edits in the Homelab checkout.
 - Security-sensitive changes to authentication, cache publication, paths, or
   credentials require focused regression coverage and an explicit PR summary.
+- Finish cleanup of your own task checkout whenever the task ends, including
+  failed, blocked, and unmerged work. Follow the
+  [task-end cleanup obligations](references/pr.md#task-end-cleanup) and current
+  shared procedures; set an outside `workdir` on every cleanup exec-tool call.
 - Opening a PR authorizes the originating session to carry it through current-
   head CI, actionable review, protected squash merge, and safe cleanup. Never
   bypass protection or force-push.
