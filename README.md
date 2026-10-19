@@ -175,8 +175,14 @@ CACHE_URL=http://127.0.0.1:3000 \
 
 In token-map mode, set `NX_CACHE_TOKENS_FILE` instead. The map must contain at
 least one read-role and one write-role entry so the canary can verify both
-authorization paths. Set `TEXTFILE_DIR` to write Prometheus node-exporter
+authorization paths; this mode parses the map with `server.js`, which must sit
+beside the script. Set `TEXTFILE_DIR` to write Prometheus node-exporter
 textfile metrics; it defaults to `/var/lib/prometheus/node-exporter`.
+
+The image ships `canary.sh` next to `server.js` under `/app` so a deployment
+can extract and run the canary at exactly the published server revision
+(`docker cp <container>:/app/canary.sh`). The container itself has no `curl`,
+so the canary runs on the host, not inside the image.
 
 ## License
 

@@ -12,7 +12,8 @@ For container or ownership changes, also run:
 ```bash
 docker build --tag nx-cache-server:local apps/nx-cache-server
 docker run --rm --entrypoint /bin/sh nx-cache-server:local -c \
-  'test -r /app/server.js && test "$(stat -c %U:%G /app/server.js)" = node:node'
+  'test -r /app/server.js && test "$(stat -c %U:%G /app/server.js)" = node:node
+  && test -x /app/canary.sh'
 ```
 
 Use focused targets while iterating (`npm run lint`, `npm test`, or the

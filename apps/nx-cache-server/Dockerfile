@@ -10,6 +10,11 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 # with a private umask.  Make the runtime user the owner so that checkout mode
 # cannot make the application unreadable once the image switches to `node`.
 COPY --chown=node:node server.js /app/server.js
+# The live integrity canary ships beside the server it tests, so a deployment
+# can run the canary at exactly the published server revision instead of
+# keeping its own copy. It is not run inside the container (the image has no
+# curl); deployments extract it with `docker cp`.
+COPY --chown=node:node canary.sh /app/canary.sh
 
 USER node
 EXPOSE 3000
