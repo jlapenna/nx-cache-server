@@ -52,9 +52,3 @@ test('architecture records service and deployment ownership', async () => {
     assert.match(architecture, new RegExp(concept.replaceAll('.', '\\.'), 'i'));
   }
 });
-
-test('oversized or procedural context would be rejected', () => {
-  const oversized = 'x'.repeat(14 * 1024 + 1);
-  assert.ok(Buffer.byteLength(oversized) > 14 * 1024);
-  assert.match('gh pr merge 1', /gh pr (create|merge)/);
-});
