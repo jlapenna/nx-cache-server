@@ -51,7 +51,8 @@ jobs:
       - run: docker build --tag nx-cache-server:ci apps/nx-cache-server
       - run: >-
           docker run --rm --entrypoint /bin/sh nx-cache-server:ci -c
-          'test -r /app/server.js && test "$(stat -c %U:%G /app/server.js)" = node:node'
+          'test -r /app/server.js && test "$(stat -c %U:%G /app/server.js)" = node:node
+          && test -x /app/canary.sh'
 
   terraform:
     name: repository-owned Terraform
