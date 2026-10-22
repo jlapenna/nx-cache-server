@@ -21,6 +21,7 @@ for the task.
 | Server or cache protocol | `ARCHITECTURE.md`, `apps/nx-cache-server/server.test.js` | `npm run verify` |
 | Credentials or authorization | `SECURITY.md`, `ARCHITECTURE.md` | focused protocol tests, then `npm run verify` |
 | Container or runtime user | `apps/nx-cache-server/Dockerfile`, development skill verification reference | full gate plus container ownership check |
+| Nx client cache integration | `.agents/skills/nx-remote-cache/SKILL.md` | client repository verification and cache authentication |
 | Local operation | `README.md`, `docker-compose.yml` | `docker compose config -q` |
 | Production rollout | Homelab documentation | no deployment from this repository |
 | Contribution or PR | `CONTRIBUTING.md`, development skill PR reference | protected PR lifecycle |
