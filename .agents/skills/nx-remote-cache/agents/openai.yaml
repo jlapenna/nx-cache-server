@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nx Remote Cache"
+  short_description: "Wire Nx repos to the self-hosted Nx L2 cache"
+  default_prompt: "Use $nx-remote-cache to configure this Nx repo for the self-hosted Nx L2 remote cache."

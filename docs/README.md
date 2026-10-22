@@ -9,6 +9,7 @@ Start with the smallest document that owns the question.
 | Contribute changes | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Report or evaluate security issues | [`../SECURITY.md`](../SECURITY.md) |
 | Follow the agent development workflow | [`../.agents/skills/nx-cache-server-dev/SKILL.md`](../.agents/skills/nx-cache-server-dev/SKILL.md) |
+| Configure Nx clients for the remote cache | [`../.agents/skills/nx-remote-cache/SKILL.md`](../.agents/skills/nx-remote-cache/SKILL.md) |
 | Inspect repository protection ownership | [`../infra/github-ruleset/README.md`](../infra/github-ruleset/README.md) |
 
 Runtime behavior belongs beside the service in `apps/nx-cache-server/`:
