@@ -4,18 +4,17 @@
     "name": "Joe LaPenna"
   },
   "metadata": {
-    "description": "nx-cache-server development and remote cache integration skills.",
-    "version": "1.1.0"
+    "description": "nx-cache-server repository development skills.",
+    "version": "1.1.1"
   },
   "plugins": [
     {
       "name": "nx-cache-server-skills",
-      "description": "Development guardrails for nx-cache-server and integration guidance for its Nx remote cache clients.",
+      "description": "Repository-specific development and pull-request guardrails for nx-cache-server.",
       "source": "./",
       "strict": false,
       "skills": [
-        "./nx-cache-server-dev",
-        "./nx-remote-cache"
+        "./nx-cache-server-dev"
       ]
     }
   ]
