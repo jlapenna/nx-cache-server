@@ -1,9 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "github>jlapenna/repo-tools//renovate-preset",
-    "monorepo:nx"
-  ],
+  "extends": ["github>jlapenna/repo-tools//renovate-preset", "monorepo:nx"],
   "packageRules": [
     {
       "description": "Container image major version bumps (for example a Node major) can change runtime behavior; hold them for manual review instead of auto-merging.",
@@ -17,9 +14,5 @@
       "matchPackageNames": ["nx-cache-server"],
       "enabled": false
     }
-  ],
-  "vulnerabilityAlerts": {
-    "enabled": true,
-    "labels": ["bot:renovate", "type:security"]
-  }
+  ]
 }
