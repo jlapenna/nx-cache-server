@@ -29,19 +29,18 @@ jobs:
       # `npm ci` below ran on the runner's bundled npm instead. The npm 12
       # bump (#56) went green that way while a real npm 12 run failed
       # locally (EALLOWGIT on the repo's own git dependency), so this check
-      # was passing for the wrong reason. Enable corepack and assert the
-      # version actually in use matches the pin, so it cannot drift back.
+      # was passing for the wrong reason. Install the pinned npm and assert
+      # the version actually in use matches the pin, so it cannot drift back.
       - name: Activate the pinned npm and prove it is in use
         run: |
           set -euo pipefail
-          # `corepack enable` alone does not shim npm -- Corepack installs
-          # npm's shim only when asked for it by name -- so the bundled npm
-          # stays on PATH and the assertion below fails. Proven on this very
-          # branch: run 35545100312 printed
-          # `packageManager=npm@12.0.2 npm in PATH=11.19.0`.
-          corepack enable npm
+          # Node 25+ no longer bundles Corepack, so `corepack enable npm`
+          # cannot shim the toolchain's npm: on Node 26 run 40818546703 printed
+          # `packageManager=npm@12.2.1 npm in PATH=11.20.0`. Install the
+          # pinned release into setup-node's prefix, which is first on PATH.
           pinned="$(node -p "require('./package.json').packageManager")"
           want="${pinned#npm@}"
+          npm install --global "npm@${want}"
           got="$(npm --version)"
           echo "packageManager=$pinned npm in PATH=$got"
           test "$got" = "$want"
