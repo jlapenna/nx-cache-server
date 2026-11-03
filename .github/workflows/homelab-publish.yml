@@ -1,0 +1,90 @@
+name: Request Homelab publish
+
+# Homelab builds, publishes and deploys this repository's internal image on
+# its publish lane (jlapenna/homelab .github/workflows/publish.yml, target
+# nx-cache-server; homelab#3212). After CI passes on a push to main, this
+# workflow asks that lane to publish. The lane builds the current main tip
+# only when its promoted :latest carries another revision, then rings the
+# Homelab controller's deploy, which no-ops when that revision already runs.
+#
+# Credential: the agent-lcars App (repository variable AGENT_LCARS_CLIENT_ID,
+# secret AGENT_LCARS_PRIVATE_KEY; Joe's decision, homelab#3212). The token is
+# scoped to Actions write on jlapenna/homelab only: it can start a workflow
+# run there and nothing else. This repository still holds no BuildKit or
+# registry credential.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Re-request the current main tip by hand.
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: homelab-publish-request
+  cancel-in-progress: false
+
+jobs:
+  request:
+    name: Request the Homelab publish
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push'))
+    # A control job: it only dispatches the Homelab run and finds it.
+    runs-on: [nx-cache-server-ci]
+    timeout-minutes: 5
+    steps:
+      - name: Require the agent-lcars App
+        env:
+          CLIENT_ID: ${{ vars.AGENT_LCARS_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.AGENT_LCARS_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "::error::the repository variable AGENT_LCARS_CLIENT_ID and secret AGENT_LCARS_PRIVATE_KEY must be set"
+            exit 1
+          fi
+
+      - name: Mint a Homelab dispatch token
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AGENT_LCARS_CLIENT_ID }}
+          private-key: ${{ secrets.AGENT_LCARS_PRIVATE_KEY }}
+          owner: jlapenna
+          repositories: homelab
+          permission-actions: write
+
+      - name: Dispatch publish.yml and find its run
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          REQUEST_ID: nx-cache-server-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::unexpected commit SHA: ${SOURCE_SHA}"; exit 1; }
+          if ! gh workflow run publish.yml -R jlapenna/homelab --ref main \
+            -f target=nx-cache-server \
+            -f source_sha="$SOURCE_SHA" \
+            -f request_id="$REQUEST_ID"; then
+            echo "::error::jlapenna/homelab refused the publish.yml dispatch. Check that the agent-lcars App is installed on jlapenna/homelab with Actions: read and write."
+            exit 1
+          fi
+          for _ in $(seq 24); do
+            id="$(gh run list -R jlapenna/homelab -w publish.yml -e workflow_dispatch -L 50 \
+              --json databaseId,displayTitle \
+              --jq "map(select(.displayTitle | endswith(\" request=${REQUEST_ID}\"))) | .[0].databaseId // empty")"
+            if [ -n "$id" ]; then
+              url="https://github.com/jlapenna/homelab/actions/runs/${id}"
+              echo "Requested nx-cache-server ${SOURCE_SHA}: ${url}"
+              echo "Homelab publish run: ${url}" >>"$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::The publish.yml run for request=${REQUEST_ID} did not appear in jlapenna/homelab within 120s."
+          exit 1
