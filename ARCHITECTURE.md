@@ -58,12 +58,15 @@ publisher, deployed digest, secret delivery, service configuration, canary,
 and rollback. If production desired state changes, make that change in
 Homelab and use its approval and verification path.
 
-Nothing in this repository notifies Homelab, and source changes do not
-reach production immediately: Homelab and Agent LCARS are separate systems,
-so no workflow here uses the Agent LCARS App to dispatch Homelab. Homelab
-delivers `main` on its own daily backstop, when it applies new configuration,
-or when the maintainer runs
-`gh workflow run source-reconcile.yml -R jlapenna/homelab -f source=nx-cache-server`.
+After CI passes on a push to `main`, `.github/workflows/homelab-publish.yml`
+asks Homelab to publish: it dispatches `jlapenna/homelab`'s `publish.yml`
+(target `nx-cache-server`) with an `agent-lcars` App token scoped to Actions
+write on `jlapenna/homelab` only (Joe's decision, jlapenna/homelab#3212). The
+Homelab publish lane builds the main tip only when its promoted image carries
+another revision, then the Homelab controller performs the rollout. This
+repository holds no BuildKit or registry credential and starts no deploy
+itself. To re-request the current tip, run
+`gh workflow run homelab-publish.yml -R jlapenna/nx-cache-server --ref main`.
 
 ## Proof Ladder
 
