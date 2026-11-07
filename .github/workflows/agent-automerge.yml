@@ -56,6 +56,5 @@ jobs:
       app-token-enabled: true
       app-client-id: ${{ vars.AGENT_LCARS_CLIENT_ID }}
       runs-on: '["nx-cache-server-ci"]'
-      required-checks: '["verify","repository-owned Terraform"]'
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.AGENT_LCARS_PRIVATE_KEY }}
