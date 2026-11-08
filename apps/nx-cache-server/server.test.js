@@ -449,6 +449,18 @@ test('Prometheus metrics expose cache outcomes without credentials', async () =>
     status: 200,
     body: '12345',
   });
+  // The server counts a request as completed on the response's `finish`
+  // event, which can run after this client has already read the whole body.
+  // Its access log line is written in the same synchronous step, right after
+  // the counters update, so wait for those lines before scraping.
+  for (const method of ['PUT', 'GET']) {
+    await waitForLog(
+      (entry) =>
+        entry.event === 'cache_request' &&
+        entry.hash === 'prometheus-metric-entry' &&
+        entry.method === method,
+    );
+  }
 
   const response = await fetch(serverUrl('/metrics'));
   assert.equal(response.status, 200);
