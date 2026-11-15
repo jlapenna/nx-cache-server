@@ -16,7 +16,10 @@ checkout stays clean on `main`.
   runtime state.
 - Homelab owns production image references and deployment. This repository
   builds and tests the server; merging here does not authorize deployment or
-  edits in the Homelab checkout.
+  edits in the Homelab checkout. "Getting a fix live" ends at the merge here:
+  once CI passes on `main`, `.github/workflows/homelab-publish.yml` asks
+  Homelab to publish, and Homelab builds the image, rolls it out and owns
+  production verification (see [references/pr.md](references/pr.md#after-merge)).
 - Security-sensitive changes to authentication, cache publication, paths, or
   credentials require focused regression coverage and an explicit PR summary.
 - Finish cleanup of your own task checkout whenever the task ends, including

@@ -5,24 +5,25 @@
       "id": 1,
       "name": "fix-put-and-ship",
       "prompt": "I want to fix a bug in how our self-hosted Nx cache server handles PUT uploads and get it live. Walk me through the steps from starting work to it running in production, with the exact verification commands. Don't run anything.",
-      "expected_output": "Linked worktree from origin/main plus ./tools/setup-worktree.sh; change server.js with focused regression tests (security-sensitive cache publication); run npm run verify and docker compose config -q; PR must pass verify, validate / repository validation and repository-owned Terraform, squash merge; Homelab owns image references and deployment, so merging does not deploy.",
+      "expected_output": "Linked worktree from origin/main plus ./tools/setup-worktree.sh; change server.js with focused regression tests (security-sensitive cache publication); final gate npm run verify and docker compose config -q; PR must pass verify, validate / repository validation and repository-owned Terraform, squash merge; merging does not deploy: after main CI passes, homelab-publish.yml asks Homelab to publish and Homelab performs the rollout and owns production verification.",
       "files": [],
       "assertions": [
-        "Starts in a linked worktree from fresh origin/main and runs ./tools/setup-worktree.sh, never committing from the primary checkout",
-        "Gives the final gate as `npm run verify` and `docker compose config -q` (not just focused targets) and names server.js and its tests as the GET/HEAD/PUT contract owner",
-        "States that Homelab owns production image references and deployment, so merging the PR here does not deploy or authorize editing the Homelab checkout"
+        "Tells the user to work in a linked git worktree created from origin/main and to run ./tools/setup-worktree.sh in it",
+        "Puts the fix in server.js with a focused regression test in its tests",
+        "Gives `npm run verify` and `docker compose config -q` as the final local gate",
+        "Explains that merging does not deploy: after CI passes on main, homelab-publish.yml asks Homelab to publish, and Homelab performs the rollout"
       ]
     },
     {
       "id": 2,
-      "name": "dockerfile-user-change-checks",
-      "prompt": "I'm changing the nx-cache-server container so the app files are owned by a different user. Which checks prove this before I open the PR, and what required checks must be green to merge? Don't run anything.",
-      "expected_output": "Run npm run verify and docker compose config -q, plus docker build --tag nx-cache-server:local apps/nx-cache-server and a docker run asserting /app/server.js readable and owned node:node and /app/canary.sh executable; git diff --check; required checks verify, validate / repository validation and repository-owned Terraform, resolved threads, squash merge.",
+      "name": "dockerfile-ownership-checks",
+      "prompt": "I'm reworking the nx-cache-server Dockerfile into a multi-stage build. Which checks prove the runtime image still has the right file ownership and permissions before I open the PR, and which required checks must be green to merge? Just tell me; don't run anything.",
+      "expected_output": "Core gate npm run verify and docker compose config -q, plus docker build --tag nx-cache-server:local apps/nx-cache-server and a docker run asserting /app/server.js is readable and owned node:node and /app/canary.sh is executable; required checks verify, validate / repository validation and repository-owned Terraform, resolved review threads, squash merge.",
       "files": [],
       "assertions": [
-        "Includes `docker build --tag nx-cache-server:local apps/nx-cache-server` and a docker run that checks /app/server.js ownership (node:node) and that /app/canary.sh is executable",
-        "Names the required checks `verify`, `validate / repository validation` and `repository-owned Terraform`, with resolved review threads and a squash merge (no force-push)",
-        "Also runs `npm run verify`, `docker compose config -q` and `git diff --check` before publishing"
+        "Gives a docker build of apps/nx-cache-server and a docker run that checks /app/server.js is owned by node:node and /app/canary.sh is executable",
+        "Tells the user to also run `npm run verify` and `docker compose config -q`",
+        "Names the required merge checks `verify`, `validate / repository validation` and `repository-owned Terraform`"
       ]
     }
   ]
