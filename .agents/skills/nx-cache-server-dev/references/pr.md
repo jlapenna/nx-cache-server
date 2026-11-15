@@ -22,6 +22,19 @@ actionable threads are resolved. Confirm
 `gh pr view --json state,mergedAt,mergeCommit` reports an actual merge. Do not
 deploy; Homelab owns rollout.
 
+## After merge
+
+The path to production is automatic and lives outside this repository, so a
+user asking to "get it live" needs to know where your part stops. After CI
+passes on the push to `main`, `.github/workflows/homelab-publish.yml`
+dispatches Homelab's `publish.yml` (target `nx-cache-server`). Homelab builds
+the main tip when its promoted image carries another revision, then its
+controller rolls it out. Confirm the `homelab-publish` run succeeded; to
+re-request the current tip, run
+`gh workflow run homelab-publish.yml -R jlapenna/nx-cache-server --ref main`.
+Production health, the canary and rollback are Homelab evidence. A health
+response alone does not prove a PUT was stored or later served as a hit.
+
 ## Task-end cleanup
 
 Cleanup of your own task checkout is mandatory whenever the task ends,
