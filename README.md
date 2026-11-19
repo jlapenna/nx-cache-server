@@ -98,19 +98,22 @@ Every cache request uses `Authorization: Bearer <token>`.
 
 | Request | Result |
 | --- | --- |
-| `GET /healthz` | unauthenticated `200` liveness response |
+| `GET` or `HEAD /healthz` | unauthenticated `200` liveness response |
 | `GET` or `HEAD /metrics` | unauthenticated Prometheus text exposition |
-| `GET` or `HEAD /v1/cache/<hash>` | `200`, `404`, or `403` |
-| `PUT /v1/cache/<hash>` | `200` stored, `409` already present, or `403` for a read-only credential |
+| `GET` or `HEAD /v1/cache/<hash>` | `200`, `404`, or `401` (`text/plain`) for missing/invalid credentials |
+| `PUT /v1/cache/<hash>` | `200` stored, `409` already present, `403` (`text/plain`) for a read-only credential, or `401` (`text/plain`) for missing/invalid credentials |
 
 Entries are immutable. Uploads stream to a temporary file and publish via a
 no-replace hard link, so readers see either a complete entry or a `404`, and
 concurrent writers cannot overwrite the first published value. The backing
 filesystem must support hard links.
 
-The server removes entries older than `MAX_AGE_DAYS`, then evicts least
-recently used entries until it is below `MAX_CACHE_GB`. A successful `GET`
-refreshes an entry's modification time.
+The server prunes asynchronously in the background: it removes entries older
+than `MAX_AGE_DAYS`, removes orphaned `.tmp-*` upload files older than
+`ORPHAN_TMP_MAX_AGE_MS` (default 1 hour), then evicts least recently used
+entries until total size is under `MAX_CACHE_GB`. A successful `GET` refreshes
+an entry's modification time (throttled to `MTIME_REFRESH_INTERVAL_MS`, default
+60 seconds).
 
 ## Prometheus metrics
 

@@ -2,9 +2,9 @@
 // Nx self-hosted HTTP remote cache server.
 //
 // Implements the protocol nx's built-in HTTP client speaks when
-// NX_SELF_HOSTED_REMOTE_CACHE_SERVER is set (verified against nx 23.1.0):
-//   GET /v1/cache/{hash}  -> 200 + application/octet-stream | 404 | 403
-//   PUT /v1/cache/{hash}  -> 200 stored | 409 already exists | 403 read-only
+// NX_SELF_HOSTED_REMOTE_CACHE_SERVER is set (verified against nx 24.0.6):
+//   GET /v1/cache/{hash}  -> 200 + application/octet-stream | 404 | 401 (text/plain)
+//   PUT /v1/cache/{hash}  -> 200 stored | 409 already exists | 403 read-only | 401 (text/plain)
 // Auth: `Authorization: Bearer <token>` on every cache request.
 //
 // Storage is one immutable file per hash under CACHE_DIR. PUTs stream to a
@@ -12,28 +12,21 @@
 // hard link. Readers therefore see either no entry or one complete entry, and
 // concurrent writers cannot replace the first successfully published value.
 //
-// Entries are pruned on a timer: anything older than MAX_AGE_DAYS goes, then
-// oldest-first until the total is under MAX_CACHE_GB. GET refreshes an entry's
-// mtime so hot entries survive pruning. No dependencies; state is fully
-// derivable (a lost cache only costs recomputation), so the data needs no
-// backup. Prometheus can scrape unauthenticated, low-cardinality operational
-// metrics at GET /metrics; cache hashes and credential names are never labels.
+// Entries are pruned asynchronously on a timer: anything older than
+// MAX_AGE_DAYS goes, then oldest-first until the total is under MAX_CACHE_GB.
+// Stale orphaned `.tmp-*` upload files older than ORPHAN_TMP_MAX_AGE_MS are
+// also removed during pruning. GET refreshes an entry's mtime (throttled by
+// MTIME_REFRESH_INTERVAL_MS) so hot entries survive pruning without redundant
+// metadata writes. No dependencies; state is fully derivable (a lost cache
+// only costs recomputation), so the data needs no backup. Prometheus can
+// scrape unauthenticated, low-cardinality operational metrics at GET /metrics;
+// cache hashes and credential names are never labels.
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-
-const PORT = Number(process.env.PORT || 3000);
-const CACHE_DIR = process.env.CACHE_DIR || '/data';
-const ACCESS_TOKEN = process.env.NX_CACHE_ACCESS_TOKEN;
-const READ_ONLY_ACCESS_TOKEN = process.env.NX_CACHE_READ_ONLY_ACCESS_TOKEN;
-const TOKENS_FILE = process.env.NX_CACHE_TOKENS_FILE;
-const MAX_CACHE_GB = Number(process.env.MAX_CACHE_GB || 50);
-const MAX_AGE_DAYS = Number(process.env.MAX_AGE_DAYS || 14);
-const PRUNE_INTERVAL_MS = Number(
-  process.env.PRUNE_INTERVAL_MS || 60 * 60 * 1000,
-);
+const { pipeline } = require('stream');
 
 // Hashes are hex/word characters; anything else is a traversal attempt.
 const HASH_RE = /^[A-Za-z0-9_-]{1,128}$/;
@@ -41,7 +34,81 @@ const PROMETHEUS_CONTENT_TYPE = 'text/plain; version=0.0.4; charset=utf-8';
 const REQUEST_DURATION_BUCKETS = [
   0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10,
 ];
+const STREAM_HIGH_WATER_MARK = 256 * 1024;
+const PRUNE_STAT_CONCURRENCY = 32;
+const KEEP_ALIVE_TIMEOUT_MS = 60 * 1000;
+const HEADERS_TIMEOUT_MS = 65 * 1000;
 const processStartedAtSeconds = Date.now() / 1000;
+
+function parseNumberEnv(
+  env,
+  name,
+  defaultValue,
+  { min = 0, max = Infinity, integer = false, allowMin = false } = {},
+) {
+  const raw = env[name];
+  if (raw === undefined || raw === '') return defaultValue;
+  const value = Number(raw);
+  const meetsMin = allowMin ? value >= min : value > min;
+  if (
+    !Number.isFinite(value) ||
+    !meetsMin ||
+    value > max ||
+    (integer && !Number.isInteger(value))
+  ) {
+    const comparator = allowMin ? '>=' : '>';
+    const bound = Number.isFinite(max) ? `${min}..${max}` : `${comparator} ${min}`;
+    throw new Error(
+      `${name} must be a valid ${integer ? 'integer' : 'number'} (${bound})`,
+    );
+  }
+  return value;
+}
+
+function parseConfig(env) {
+  return {
+    port: parseNumberEnv(env, 'PORT', 3000, {
+      min: 0,
+      max: 65535,
+      integer: true,
+      allowMin: true,
+    }),
+    cacheDir: env.CACHE_DIR || '/data',
+    accessToken: env.NX_CACHE_ACCESS_TOKEN,
+    readOnlyAccessToken: env.NX_CACHE_READ_ONLY_ACCESS_TOKEN,
+    tokensFile: env.NX_CACHE_TOKENS_FILE,
+    maxCacheGb: parseNumberEnv(env, 'MAX_CACHE_GB', 50, { min: 0 }),
+    maxAgeDays: parseNumberEnv(env, 'MAX_AGE_DAYS', 14, { min: 0 }),
+    pruneIntervalMs: parseNumberEnv(env, 'PRUNE_INTERVAL_MS', 60 * 60 * 1000, {
+      min: 0,
+    }),
+    orphanTmpMaxAgeMs: parseNumberEnv(
+      env,
+      'ORPHAN_TMP_MAX_AGE_MS',
+      60 * 60 * 1000,
+      { min: 0, allowMin: true },
+    ),
+    mtimeRefreshIntervalMs: parseNumberEnv(
+      env,
+      'MTIME_REFRESH_INTERVAL_MS',
+      60 * 1000,
+      { min: 0, allowMin: true },
+    ),
+  };
+}
+
+let config = {
+  port: 3000,
+  cacheDir: '/data',
+  accessToken: undefined,
+  readOnlyAccessToken: undefined,
+  tokensFile: undefined,
+  maxCacheGb: 50,
+  maxAgeDays: 14,
+  pruneIntervalMs: 60 * 60 * 1000,
+  orphanTmpMaxAgeMs: 60 * 60 * 1000,
+  mtimeRefreshIntervalMs: 60 * 1000,
+};
 
 // The server deliberately has no runtime dependencies, including a Prometheus
 // client. Keep these metrics to bounded label sets: arbitrary cache hashes,
@@ -56,6 +123,11 @@ const metrics = {
   inFlightRequests: 0,
   pruneErrors: 0,
 };
+
+function parseContentLength(header) {
+  const value = Number(header);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
+}
 
 function prometheusMethod(method) {
   return ['GET', 'HEAD', 'PUT'].includes(method) ? method : 'OTHER';
@@ -179,8 +251,15 @@ function log(event, fields = {}, level = 'info') {
 }
 
 function tokenMatches(candidate, expected) {
-  if (!expected || candidate.length !== expected.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(expected));
+  if (!expected) return false;
+  const candidateBuf = Buffer.isBuffer(candidate)
+    ? candidate
+    : Buffer.from(candidate, 'utf8');
+  const expectedBuf = Buffer.isBuffer(expected)
+    ? expected
+    : Buffer.from(expected, 'utf8');
+  if (candidateBuf.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(candidateBuf, expectedBuf);
 }
 
 // Parses and validates a NX_CACHE_TOKENS_FILE payload (raw JSON text) into a
@@ -253,30 +332,37 @@ function loadTokenCandidates(filePath) {
 // Populated at startup below when NX_CACHE_TOKENS_FILE is set; stays null
 // (legacy two-scalar-token mode) otherwise.
 let tokenCandidates = null;
+let accessTokenBuf = null;
+let readOnlyAccessTokenBuf = null;
 
 function authRole(req) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : header;
+  if (token.length === 0) return null;
+  const candidateBuf = Buffer.from(token, 'utf8');
 
   if (tokenCandidates) {
     // Walk every candidate and keep comparing after a match, so response
     // timing cannot leak which name (or how many names) are configured.
     let matched = null;
     for (const candidate of tokenCandidates) {
-      if (tokenMatches(token, candidate.token)) matched = candidate;
+      if (tokenMatches(candidateBuf, candidate.tokenBuf)) matched = candidate;
     }
     return matched ? { role: matched.role, name: matched.name } : null;
   }
 
-  if (tokenMatches(token, ACCESS_TOKEN)) return { role: 'write', name: null };
-  if (tokenMatches(token, READ_ONLY_ACCESS_TOKEN)) {
-    return { role: 'read', name: null };
+  let matched = null;
+  if (tokenMatches(candidateBuf, accessTokenBuf)) {
+    matched = { role: 'write', name: null };
   }
-  return null;
+  if (tokenMatches(candidateBuf, readOnlyAccessTokenBuf)) {
+    matched = { role: 'read', name: null };
+  }
+  return matched;
 }
 
 function entryPath(hash) {
-  return path.join(CACHE_DIR, hash);
+  return path.join(config.cacheDir, hash);
 }
 
 // Publish without replacing an existing entry. Any error except EEXIST is
@@ -294,75 +380,170 @@ function publishEntry(tmp, file, callback, link = fs.link) {
   });
 }
 
-function prune() {
-  let entries;
+async function mapWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+  const runners = Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+let pruning = false;
+let activePruneDelta = null;
+
+async function prune() {
+  if (pruning) return;
+  pruning = true;
+
   try {
-    entries = fs
-      .readdirSync(CACHE_DIR)
-      .filter((file) => HASH_RE.test(file))
-      .map((hash) => {
+    let dirEntries;
+    try {
+      dirEntries = await fs.promises.readdir(config.cacheDir);
+    } catch (error) {
+      metrics.pruneErrors += 1;
+      log('cache_prune_error', { error: error.message }, 'error');
+      return;
+    }
+
+    const delta = { entries: 0, bytes: 0 };
+    activePruneDelta = delta;
+
+    const now = Date.now();
+    const cacheNames = [];
+    const tmpNames = [];
+    for (const name of dirEntries) {
+      if (HASH_RE.test(name)) {
+        cacheNames.push(name);
+      } else if (name.startsWith('.tmp-')) {
+        tmpNames.push(name);
+      }
+    }
+
+    // Remove orphaned temporary upload files left behind by crashed processes.
+    let orphanTmpRemoved = 0;
+    if (tmpNames.length > 0) {
+      await mapWithConcurrency(
+        tmpNames,
+        PRUNE_STAT_CONCURRENCY,
+        async (name) => {
+          const tmpPath = entryPath(name);
+          try {
+            const stat = await fs.promises.stat(tmpPath);
+            if (
+              stat.isFile() &&
+              now - stat.mtimeMs > config.orphanTmpMaxAgeMs
+            ) {
+              await fs.promises.unlink(tmpPath);
+              orphanTmpRemoved += 1;
+            }
+          } catch (error) {
+            if (error?.code !== 'ENOENT') {
+              metrics.pruneErrors += 1;
+            }
+          }
+        },
+      );
+    }
+
+    const rawEntries = await mapWithConcurrency(
+      cacheNames,
+      PRUNE_STAT_CONCURRENCY,
+      async (hash) => {
         try {
-          const stat = fs.statSync(entryPath(hash));
+          const stat = await fs.promises.stat(entryPath(hash));
+          if (!stat.isFile()) return null;
           return { hash, size: stat.size, mtimeMs: stat.mtimeMs };
         } catch {
           return null;
         }
-      })
-      .filter(Boolean);
-  } catch (error) {
-    metrics.pruneErrors += 1;
-    log('cache_prune_error', { error: error.message }, 'error');
-    return;
-  }
+      },
+    );
+    const entries = rawEntries.filter(Boolean);
 
-  const now = Date.now();
-  const maxAgeMs = MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-  let total = 0;
-  let ageEvictions = 0;
-  let capacityEvictions = 0;
-  let kept = [];
-  for (const entry of entries) {
-    if (now - entry.mtimeMs > maxAgeMs) {
-      try {
-        fs.unlinkSync(entryPath(entry.hash));
-        ageEvictions += 1;
-      } catch {
-        metrics.pruneErrors += 1;
+    const maxAgeMs = config.maxAgeDays * 24 * 60 * 60 * 1000;
+    let total = 0;
+    let ageEvictions = 0;
+    let capacityEvictions = 0;
+    const kept = [];
+    const expired = [];
+    for (const entry of entries) {
+      if (now - entry.mtimeMs > maxAgeMs) {
+        expired.push(entry);
+      } else {
         kept.push(entry);
         total += entry.size;
       }
-    } else {
-      kept.push(entry);
-      total += entry.size;
     }
-  }
 
-  const maxBytes = MAX_CACHE_GB * 1024 * 1024 * 1024;
-  if (total > maxBytes) {
-    kept.sort((a, b) => a.mtimeMs - b.mtimeMs);
-    for (const entry of kept) {
-      if (total <= maxBytes) break;
-      try {
-        fs.unlinkSync(entryPath(entry.hash));
+    if (expired.length > 0) {
+      await mapWithConcurrency(
+        expired,
+        PRUNE_STAT_CONCURRENCY,
+        async (entry) => {
+          try {
+            await fs.promises.unlink(entryPath(entry.hash));
+            ageEvictions += 1;
+          } catch (error) {
+            if (error?.code !== 'ENOENT') {
+              metrics.pruneErrors += 1;
+              kept.push(entry);
+              total += entry.size;
+            }
+          }
+        },
+      );
+    }
+
+    const maxBytes = config.maxCacheGb * 1024 * 1024 * 1024;
+    if (total > maxBytes) {
+      kept.sort((a, b) => a.mtimeMs - b.mtimeMs);
+      const toEvict = [];
+      for (const entry of kept) {
+        if (total <= maxBytes) break;
         total -= entry.size;
-        capacityEvictions += 1;
-      } catch {
-        metrics.pruneErrors += 1;
+        toEvict.push(entry);
       }
+      await mapWithConcurrency(
+        toEvict,
+        PRUNE_STAT_CONCURRENCY,
+        async (entry) => {
+          try {
+            await fs.promises.unlink(entryPath(entry.hash));
+            capacityEvictions += 1;
+          } catch (error) {
+            if (error?.code !== 'ENOENT') {
+              metrics.pruneErrors += 1;
+              total += entry.size;
+            }
+          }
+        },
+      );
     }
+
+    const retainedCount = kept.length - capacityEvictions + delta.entries;
+    const retainedBytes = total + delta.bytes;
+    metrics.cacheEntries = retainedCount;
+    metrics.cacheBytes = retainedBytes;
+    metrics.cacheEvictions.age += ageEvictions;
+    metrics.cacheEvictions.capacity += capacityEvictions;
+
+    log('cache_prune', {
+      retainedCount,
+      retainedBytes,
+      ageEvictions,
+      capacityEvictions,
+      ...(orphanTmpRemoved > 0 && { orphanTmpRemoved }),
+    });
+  } finally {
+    activePruneDelta = null;
+    pruning = false;
   }
-
-  metrics.cacheEntries = entries.length - ageEvictions - capacityEvictions;
-  metrics.cacheBytes = total;
-  metrics.cacheEvictions.age += ageEvictions;
-  metrics.cacheEvictions.capacity += capacityEvictions;
-
-  log('cache_prune', {
-    retainedCount: entries.length - ageEvictions - capacityEvictions,
-    retainedBytes: total,
-    ageEvictions,
-    capacityEvictions,
-  });
 }
 
 const server = http.createServer((req, res) => {
@@ -419,10 +600,16 @@ const server = http.createServer((req, res) => {
   }
 
   // Unauthenticated liveness probe for monitoring.
-  if (req.method === 'GET' && req.url === '/healthz') {
+  if (
+    req.url === '/healthz' &&
+    (req.method === 'GET' || req.method === 'HEAD')
+  ) {
     result = 'healthy';
-    res.writeHead(200, { 'content-type': 'text/plain' });
-    res.end('ok\n');
+    res.writeHead(200, {
+      'content-type': 'text/plain',
+      'content-length': 3,
+    });
+    res.end(req.method === 'HEAD' ? undefined : 'ok\n');
     return;
   }
 
@@ -435,14 +622,22 @@ const server = http.createServer((req, res) => {
   }
   if (!match || typeof hash !== 'string' || !HASH_RE.test(hash)) {
     result = 'invalid_path';
+    if (req.method === 'PUT') req.resume();
     res.writeHead(404).end();
     return;
   }
 
   const auth = authRole(req);
   if (!auth) {
-    result = 'forbidden';
-    res.writeHead(403).end();
+    // Nx's HTTP remote cache client maps 401 with exact `content-type:
+    // text/plain` to Unauthorized; 403 on PUT is treated as a read-only token.
+    result = 'unauthorized';
+    if (req.method === 'PUT') {
+      sizeBytes = parseContentLength(req.headers['content-length']);
+      req.resume();
+    }
+    res.writeHead(401, { 'content-type': 'text/plain' });
+    res.end(req.method === 'HEAD' ? undefined : 'Unauthorized\n');
     return;
   }
   tokenName = auth.name;
@@ -450,45 +645,78 @@ const server = http.createServer((req, res) => {
   const file = entryPath(hash);
 
   if (req.method === 'GET' || req.method === 'HEAD') {
-    fs.stat(file, (error, stat) => {
-      if (error?.code === 'ENOENT') {
+    // Open once and fstat the descriptor so a concurrent prune() unlink cannot
+    // race between stat and read and produce a truncated 200 response.
+    fs.open(file, 'r', (openError, fd) => {
+      if (openError?.code === 'ENOENT') {
         result = 'miss';
-        res.writeHead(404).end();
+        if (!res.headersSent && !res.destroyed) res.writeHead(404).end();
         return;
       }
-      if (error || !stat.isFile()) {
+      if (openError) {
         result = 'read_error';
-        log(
-          'cache_read_error',
-          { hash, error: error?.message || 'entry is not a regular file' },
-          'error',
-        );
-        res.writeHead(500).end();
+        log('cache_read_error', { hash, error: openError.message }, 'error');
+        if (!res.headersSent && !res.destroyed) res.writeHead(500).end();
+        return;
+      }
+      if (res.destroyed) {
+        fs.close(fd, () => {});
         return;
       }
 
-      result = 'hit';
-      sizeBytes = stat.size;
-      fs.utimes(file, new Date(), new Date(), () => {});
-      res.writeHead(200, {
-        'content-type': 'application/octet-stream',
-        'content-length': stat.size,
+      fs.fstat(fd, (statError, stat) => {
+        if (statError || !stat.isFile()) {
+          fs.close(fd, () => {});
+          result = 'read_error';
+          log(
+            'cache_read_error',
+            {
+              hash,
+              error: statError?.message || 'entry is not a regular file',
+            },
+            'error',
+          );
+          if (!res.headersSent && !res.destroyed) res.writeHead(500).end();
+          return;
+        }
+        if (res.destroyed) {
+          fs.close(fd, () => {});
+          return;
+        }
+
+        result = 'hit';
+        sizeBytes = stat.size;
+        res.writeHead(200, {
+          'content-type': 'application/octet-stream',
+          'content-length': stat.size,
+        });
+        if (req.method === 'HEAD') {
+          fs.close(fd, () => {});
+          res.end();
+          return;
+        }
+
+        const nowMs = Date.now();
+        if (nowMs - stat.mtimeMs >= config.mtimeRefreshIntervalMs) {
+          const now = new Date(nowMs);
+          fs.utimes(file, now, now, () => {});
+        }
+
+        const stream = fs.createReadStream(null, {
+          fd,
+          autoClose: true,
+          highWaterMark: STREAM_HIGH_WATER_MARK,
+        });
+        pipeline(stream, res, (streamError) => {
+          if (!streamError) return;
+          if (streamError.code === 'ERR_STREAM_PREMATURE_CLOSE') {
+            result = 'connection_closed';
+            return;
+          }
+          result = 'read_error';
+          log('cache_read_error', { hash, error: streamError.message }, 'error');
+        });
       });
-      if (req.method === 'HEAD') {
-        res.end();
-        return;
-      }
-      const stream = fs.createReadStream(file);
-      stream.on('error', (streamError) => {
-        result = 'read_error';
-        log(
-          'cache_read_error',
-          { hash, error: streamError.message },
-          'error',
-        );
-        res.destroy();
-      });
-      stream.pipe(res);
     });
     return;
   }
@@ -496,64 +724,86 @@ const server = http.createServer((req, res) => {
   if (req.method === 'PUT') {
     if (role === 'read') {
       result = 'read_only';
-      sizeBytes = Number(req.headers['content-length'] || 0);
+      sizeBytes = parseContentLength(req.headers['content-length']);
       req.resume();
-      res.writeHead(403).end();
-      return;
-    }
-    if (fs.existsSync(file)) {
-      result = 'exists';
-      sizeBytes = Number(req.headers['content-length'] || 0);
-      req.resume();
-      res.writeHead(409).end();
+      res
+        .writeHead(403, { 'content-type': 'text/plain' })
+        .end('Read-only token\n');
       return;
     }
 
-    req.on('data', (chunk) => {
-      sizeBytes += chunk.length;
-    });
-    const tmp = path.join(
-      CACHE_DIR,
-      `.tmp-${hash}-${process.pid}-${crypto.randomBytes(8).toString('hex')}`,
-    );
-    const output = fs.createWriteStream(tmp, { flags: 'wx' });
-    let failed = false;
-    const cleanup = () => fs.unlink(tmp, () => {});
+    fs.access(file, fs.constants.F_OK, (accessError) => {
+      if (!accessError) {
+        result = 'exists';
+        sizeBytes = parseContentLength(req.headers['content-length']);
+        req.resume();
+        if (!res.headersSent && !res.destroyed) res.writeHead(409).end();
+        return;
+      }
+      if (accessError.code !== 'ENOENT') {
+        result = 'write_error';
+        log('cache_write_error', { hash, error: accessError.message }, 'error');
+        req.resume();
+        if (!res.headersSent && !res.destroyed) res.writeHead(500).end();
+        return;
+      }
+      if (req.destroyed || res.destroyed) {
+        result = 'upload_aborted';
+        return;
+      }
 
-    output.on('error', (error) => {
-      if (failed) return;
-      failed = true;
-      result = req.aborted ? 'upload_aborted' : 'write_error';
-      log('cache_write_error', { hash, error: error.message }, 'error');
-      cleanup();
-      if (!res.headersSent && !res.destroyed) res.writeHead(500).end();
-    });
-    req.on('aborted', () => {
-      failed = true;
-      result = 'upload_aborted';
-      output.destroy();
-      cleanup();
-    });
-    req.pipe(output);
-    output.on('finish', () => {
-      if (failed) return;
-      publishEntry(tmp, file, (error, published) => {
-        cleanup();
-        if (error) {
-          result = 'publish_error';
-          log('cache_publish_error', { hash, error: error.message }, 'error');
-          res.writeHead(500).end();
-        } else if (!published) {
-          result = 'exists';
-          res.writeHead(409).end();
-        } else {
-          result = 'stored';
-          metrics.cacheEntries += 1;
-          metrics.cacheBytes += sizeBytes;
-          // Nx 23.1.0 accepts 200, 409, and 403 from store(); 202 is treated
-          // as a misconfigured remote-cache endpoint.
-          res.writeHead(200).end();
+      req.on('data', (chunk) => {
+        sizeBytes += chunk.length;
+      });
+      const tmp = path.join(
+        config.cacheDir,
+        `.tmp-${hash}-${process.pid}-${crypto.randomBytes(8).toString('hex')}`,
+      );
+      const output = fs.createWriteStream(tmp, {
+        flags: 'wx',
+        highWaterMark: STREAM_HIGH_WATER_MARK,
+      });
+      const cleanup = () => fs.unlink(tmp, () => {});
+
+      pipeline(req, output, (pipeError) => {
+        if (pipeError || !req.complete) {
+          cleanup();
+          const aborted =
+            !req.complete ||
+            pipeError?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+            pipeError?.code === 'ECONNRESET';
+          result = aborted ? 'upload_aborted' : 'write_error';
+          if (!aborted && pipeError) {
+            log('cache_write_error', { hash, error: pipeError.message }, 'error');
+          }
+          if (!res.headersSent && !res.destroyed) {
+            res.writeHead(aborted ? 400 : 500).end();
+          }
+          return;
         }
+
+        publishEntry(tmp, file, (error, published) => {
+          cleanup();
+          if (error) {
+            result = 'publish_error';
+            log('cache_publish_error', { hash, error: error.message }, 'error');
+            if (!res.headersSent && !res.destroyed) res.writeHead(500).end();
+          } else if (!published) {
+            result = 'exists';
+            if (!res.headersSent && !res.destroyed) res.writeHead(409).end();
+          } else {
+            result = 'stored';
+            metrics.cacheEntries += 1;
+            metrics.cacheBytes += sizeBytes;
+            if (activePruneDelta) {
+              activePruneDelta.entries += 1;
+              activePruneDelta.bytes += sizeBytes;
+            }
+            // Nx 24.0.6 accepts 200, 409, and 403 from store(); 202 is treated
+            // as a misconfigured remote-cache endpoint.
+            if (!res.headersSent && !res.destroyed) res.writeHead(200).end();
+          }
+        });
       });
     });
     return;
@@ -563,16 +813,29 @@ const server = http.createServer((req, res) => {
   res.writeHead(405, { allow: 'GET, HEAD, PUT' }).end();
 });
 
+server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
+server.headersTimeout = HEADERS_TIMEOUT_MS;
+
 if (require.main === module) {
-  if (TOKENS_FILE) {
+  try {
+    config = parseConfig(process.env);
+  } catch (error) {
+    log('startup_error', { error: error.message }, 'error');
+    process.exit(1);
+  }
+
+  if (config.tokensFile) {
     try {
-      tokenCandidates = loadTokenCandidates(TOKENS_FILE);
+      tokenCandidates = loadTokenCandidates(config.tokensFile).map((entry) => ({
+        ...entry,
+        tokenBuf: Buffer.from(entry.token, 'utf8'),
+      }));
     } catch (error) {
       log('startup_error', { error: error.message }, 'error');
       process.exit(1);
     }
   } else {
-    if (!ACCESS_TOKEN) {
+    if (!config.accessToken) {
       log(
         'startup_error',
         { error: 'NX_CACHE_ACCESS_TOKEN must be set' },
@@ -580,46 +843,55 @@ if (require.main === module) {
       );
       process.exit(1);
     }
-    if (
-      READ_ONLY_ACCESS_TOKEN &&
-      tokenMatches(READ_ONLY_ACCESS_TOKEN, ACCESS_TOKEN)
-    ) {
-      log(
-        'startup_error',
-        {
-          error:
-            'NX_CACHE_READ_ONLY_ACCESS_TOKEN must differ from NX_CACHE_ACCESS_TOKEN',
-        },
-        'error',
-      );
-      process.exit(1);
+    accessTokenBuf = Buffer.from(config.accessToken, 'utf8');
+    if (config.readOnlyAccessToken) {
+      readOnlyAccessTokenBuf = Buffer.from(config.readOnlyAccessToken, 'utf8');
+      if (tokenMatches(readOnlyAccessTokenBuf, accessTokenBuf)) {
+        log(
+          'startup_error',
+          {
+            error:
+              'NX_CACHE_READ_ONLY_ACCESS_TOKEN must differ from NX_CACHE_ACCESS_TOKEN',
+          },
+          'error',
+        );
+        process.exit(1);
+      }
     }
   }
 
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
-  setInterval(prune, PRUNE_INTERVAL_MS).unref();
-  prune();
+  fs.mkdirSync(config.cacheDir, { recursive: true });
+  const pruneTimer = setInterval(() => {
+    void prune();
+  }, config.pruneIntervalMs);
+  pruneTimer.unref();
+  void prune();
 
-  server.listen(PORT, () => {
+  server.listen(config.port, () => {
     const address = server.address();
     log('server_started', {
-      port: typeof address === 'object' && address ? address.port : PORT,
-      cacheDir: CACHE_DIR,
-      maxCacheGb: MAX_CACHE_GB,
-      maxAgeDays: MAX_AGE_DAYS,
+      port: typeof address === 'object' && address ? address.port : config.port,
+      cacheDir: config.cacheDir,
+      maxCacheGb: config.maxCacheGb,
+      maxAgeDays: config.maxAgeDays,
       tokenMode: tokenCandidates ? 'map' : 'legacy',
       ...(tokenCandidates
         ? {}
-        : { readOnlyTokenEnabled: Boolean(READ_ONLY_ACCESS_TOKEN) }),
+        : { readOnlyTokenEnabled: Boolean(readOnlyAccessTokenBuf) }),
     });
   });
 
+  let shuttingDown = false;
   for (const signal of ['SIGTERM', 'SIGINT']) {
     process.on(signal, () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      clearInterval(pruneTimer);
       server.close(() => process.exit(0));
+      server.closeIdleConnections();
       setTimeout(() => process.exit(0), 3000).unref();
     });
   }
 }
 
-module.exports = { publishEntry, parseTokenMap };
+module.exports = { publishEntry, parseTokenMap, parseConfig, tokenMatches };
