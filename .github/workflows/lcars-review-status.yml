@@ -51,13 +51,13 @@ jobs:
                 } }
               }' --jq '.data.repository.pullRequest.timelineItems.nodes[0].id // ""')
             state=$(jq -r --arg base_event "$base_event" --arg head "$head" '
-              [ .[][] | select(.user.login == "agent-lcars[bot]" and .commit_id == $head) ]
+              [ .[][] | select(.user.login == "agent-lcars[bot]" and .commit_id == $head)
+                | select($base_event == "" or ((.body // "") | split("\n") | any(rtrimstr("\r") == "<!-- lcars-review:base-event \($base_event) -->"))) ]
               | reduce .[] as $r ("pending";
                   if $r.state == "CHANGES_REQUESTED" then "blocked"
                   elif $r.state == "COMMENTED" and . != "blocked" and
                     ($r.body // "" | split("\n") | any(rtrimstr("\r") == "<!-- lcars-review:block -->")) then "comment_blocked"
                   elif ($r.body // "" | test("<!-- attempt-claim:g[0-9]+:[^[:space:]>]+ -->")) and
-                    ($base_event == "" or ($r.body | split("\n") | any(rtrimstr("\r") == "<!-- lcars-review:base-event \($base_event) -->"))) and
                     ($r.state == "APPROVED" or ($r.state == "COMMENTED" and ($r.body | split("\n") | any(rtrimstr("\r") == "<!-- lcars-review:pass -->")) and . != "blocked"))
                   then "success" else . end)
             ' <<< "$reviews")
