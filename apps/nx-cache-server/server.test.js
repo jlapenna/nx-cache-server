@@ -6,7 +6,12 @@ const os = require('node:os');
 const path = require('node:path');
 const { afterEach, beforeEach, test } = require('node:test');
 
-const { publishEntry, parseTokenMap } = require('./server');
+const {
+  publishEntry,
+  parseTokenMap,
+  parseConfig,
+  tokenMatches,
+} = require('./server');
 
 const WRITE_TOKEN = 'write-token';
 const READ_TOKEN = 'read-token';
@@ -592,7 +597,8 @@ test('token-map mode: named tokens authenticate with their configured role', asy
     const unknown = await fetch(url('map-entry'), {
       headers: { authorization: 'Bearer not-a-real-token' },
     });
-    assert.equal(unknown.status, 403);
+    assert.equal(unknown.status, 401);
+    assert.equal(unknown.headers.get('content-type'), 'text/plain');
   } finally {
     await stopServer(proc);
   }
@@ -681,4 +687,238 @@ test('token-map mode: refuses to start with no write-role entry', async () => {
       return true;
     },
   );
+});
+
+test('tokenMatches handles multi-byte UTF-8 inputs of matching string length without throwing', () => {
+  // 'write-token' is 11 ASCII chars (11 UTF-8 bytes); 'érite-token' is also 11
+  // UTF-16 code units but 12 UTF-8 bytes.
+  assert.equal(tokenMatches('érite-token', 'write-token'), false);
+  assert.equal(tokenMatches('write-token', 'write-token'), true);
+  assert.equal(tokenMatches(Buffer.from('write-token'), Buffer.from('write-token')), true);
+  assert.equal(tokenMatches('short', ''), false);
+});
+
+test('missing or invalid credentials return 401 text/plain and multi-byte tokens do not crash the server', async () => {
+  // Exact same UTF-16 length as WRITE_TOKEN ('write-token', 11 chars) with a
+  // multi-byte latin1/UTF-8 character.
+  const multibyteToken = 'érite-token';
+  assert.equal(multibyteToken.length, WRITE_TOKEN.length);
+
+  for (const [method, headers, body] of [
+    ['GET', {}, undefined],
+    ['GET', { authorization: `Bearer ${multibyteToken}` }, undefined],
+    ['HEAD', { authorization: 'Bearer wrong-token' }, undefined],
+    ['PUT', { authorization: 'Bearer wrong-token' }, 'payload'],
+  ]) {
+    const response = await fetch(cacheUrl('auth-check'), {
+      method,
+      headers,
+      body,
+    });
+    assert.equal(response.status, 401, `${method} should return 401`);
+    assert.equal(response.headers.get('content-type'), 'text/plain');
+    const text = await response.text();
+    if (method === 'HEAD') {
+      assert.equal(text, '');
+    } else {
+      assert.ok(text.length > 0);
+    }
+  }
+
+  // Server must still be healthy after the multi-byte token request.
+  const health = await fetch(serverUrl('/healthz'));
+  assert.equal(health.status, 200);
+});
+
+test('HEAD /healthz returns 200 with an empty body', async () => {
+  const response = await fetch(serverUrl('/healthz'), { method: 'HEAD' });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'text/plain');
+  assert.equal(await response.text(), '');
+});
+
+test('zero-byte PUT and GET round-trip cleanly', async () => {
+  const put = await fetch(cacheUrl('empty-entry'), {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${WRITE_TOKEN}` },
+    body: '',
+  });
+  assert.equal(put.status, 200);
+
+  const fetched = await get('empty-entry');
+  assert.deepEqual(fetched, { status: 200, body: '' });
+});
+
+test('parseConfig validates numeric environment variables', () => {
+  const defaults = parseConfig({});
+  assert.equal(defaults.port, 3000);
+  assert.equal(defaults.maxCacheGb, 50);
+  assert.equal(defaults.maxAgeDays, 14);
+  assert.equal(defaults.pruneIntervalMs, 60 * 60 * 1000);
+  assert.equal(defaults.orphanTmpMaxAgeMs, 60 * 60 * 1000);
+  assert.equal(defaults.mtimeRefreshIntervalMs, 60 * 1000);
+
+  assert.equal(parseConfig({ PORT: '0' }).port, 0);
+  assert.throws(() => parseConfig({ PORT: 'abc' }), /PORT/);
+  assert.throws(() => parseConfig({ PORT: '70000' }), /PORT/);
+  assert.throws(() => parseConfig({ PORT: '1.5' }), /PORT/);
+  assert.throws(() => parseConfig({ MAX_CACHE_GB: 'abc' }), /MAX_CACHE_GB/);
+  assert.throws(() => parseConfig({ MAX_CACHE_GB: '0' }), /MAX_CACHE_GB/);
+  assert.throws(() => parseConfig({ MAX_AGE_DAYS: '-1' }), /MAX_AGE_DAYS/);
+  assert.throws(
+    () => parseConfig({ PRUNE_INTERVAL_MS: '0' }),
+    /PRUNE_INTERVAL_MS/,
+  );
+});
+
+test('server refuses to start with invalid numeric configuration', async () => {
+  await assert.rejects(
+    spawnServer({
+      NX_CACHE_ACCESS_TOKEN: WRITE_TOKEN,
+      MAX_CACHE_GB: 'not-a-number',
+    }),
+    (error) => {
+      assert.equal(error.code, 1);
+      const startupError = error.logs.find((r) => r.event === 'startup_error');
+      assert.match(startupError.error, /MAX_CACHE_GB/);
+      return true;
+    },
+  );
+});
+
+test('async prune removes stale orphaned temp files while keeping fresh ones and ignores directories', async () => {
+  const pruneDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'nx-cache-prune-test-'),
+  );
+  const oldTime = new Date(Date.now() - 10_000);
+  const staleTmp = path.join(pruneDir, '.tmp-orphan-old');
+  const freshTmp = path.join(pruneDir, '.tmp-active-fresh');
+  const strayDir = path.join(pruneDir, 'not_a_file_dir');
+  const validEntry = path.join(pruneDir, 'valid-entry');
+  fs.writeFileSync(staleTmp, 'stale');
+  fs.utimesSync(staleTmp, oldTime, oldTime);
+  fs.writeFileSync(freshTmp, 'fresh');
+  fs.mkdirSync(strayDir);
+  fs.writeFileSync(validEntry, '12345');
+
+  const { proc, logs: pruneLogs } = await spawnServer({
+    CACHE_DIR: pruneDir,
+    NX_CACHE_ACCESS_TOKEN: WRITE_TOKEN,
+    ORPHAN_TMP_MAX_AGE_MS: '1000',
+  });
+  try {
+    const deadline = Date.now() + 2000;
+    let pruneRecord;
+    while (Date.now() < deadline) {
+      pruneRecord = pruneLogs.find((entry) => entry.event === 'cache_prune');
+      if (pruneRecord) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(pruneRecord, 'expected a cache_prune log record');
+    assert.equal(pruneRecord.orphanTmpRemoved, 1);
+    assert.equal(pruneRecord.retainedCount, 1);
+    assert.equal(pruneRecord.retainedBytes, 5);
+    assert.equal(fs.existsSync(staleTmp), false);
+    assert.equal(fs.existsSync(freshTmp), true);
+    assert.equal(fs.existsSync(strayDir), true);
+    assert.equal(fs.existsSync(validEntry), true);
+  } finally {
+    await stopServer(proc);
+    fs.rmSync(pruneDir, { recursive: true, force: true });
+  }
+});
+
+test('GET throttles mtime refresh for recently touched entries and refreshes stale ones', async () => {
+  const mtimeDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'nx-cache-mtime-test-'),
+  );
+  const { proc, port: mtimePort } = await spawnServer({
+    CACHE_DIR: mtimeDir,
+    NX_CACHE_ACCESS_TOKEN: WRITE_TOKEN,
+    MTIME_REFRESH_INTERVAL_MS: '60000',
+  });
+  try {
+    const url = `http://127.0.0.1:${mtimePort}/v1/cache/mtime-entry`;
+    const put = await fetch(url, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${WRITE_TOKEN}` },
+      body: 'payload',
+    });
+    assert.equal(put.status, 200);
+
+    const entryFile = path.join(mtimeDir, 'mtime-entry');
+    const recentPast = new Date(Date.now() - 5_000);
+    fs.utimesSync(entryFile, recentPast, recentPast);
+    const mtimeBeforeRecentGet = fs.statSync(entryFile).mtimeMs;
+
+    const recentGet = await fetch(url, {
+      headers: { authorization: `Bearer ${WRITE_TOKEN}` },
+    });
+    assert.equal(recentGet.status, 200);
+    assert.equal(await recentGet.text(), 'payload');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(fs.statSync(entryFile).mtimeMs, mtimeBeforeRecentGet);
+
+    const oldPast = new Date(Date.now() - 120_000);
+    fs.utimesSync(entryFile, oldPast, oldPast);
+    const mtimeBeforeHead = fs.statSync(entryFile).mtimeMs;
+
+    const head = await fetch(url, {
+      method: 'HEAD',
+      headers: { authorization: `Bearer ${WRITE_TOKEN}` },
+    });
+    assert.equal(head.status, 200);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(fs.statSync(entryFile).mtimeMs, mtimeBeforeHead);
+
+    const staleGet = await fetch(url, {
+      headers: { authorization: `Bearer ${WRITE_TOKEN}` },
+    });
+    assert.equal(staleGet.status, 200);
+    assert.equal(await staleGet.text(), 'payload');
+
+    const deadline = Date.now() + 2000;
+    while (
+      Date.now() < deadline &&
+      fs.statSync(entryFile).mtimeMs <= mtimeBeforeHead
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(
+      fs.statSync(entryFile).mtimeMs > mtimeBeforeHead,
+      'expected stale GET to refresh entry mtime',
+    );
+  } finally {
+    await stopServer(proc);
+    fs.rmSync(mtimeDir, { recursive: true, force: true });
+  }
+});
+
+test('aborting a GET mid-stream cleans up cleanly and leaves the server healthy', async () => {
+  const payload = Buffer.alloc(1024 * 1024, 'a');
+  const put = await fetch(cacheUrl('large-entry'), {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${WRITE_TOKEN}` },
+    body: payload,
+  });
+  assert.equal(put.status, 200);
+
+  await new Promise((resolve, reject) => {
+    const req = http.get(
+      cacheUrl('large-entry'),
+      { headers: { authorization: `Bearer ${WRITE_TOKEN}` } },
+      (res) => {
+        assert.equal(res.statusCode, 200);
+        res.once('data', () => {
+          req.destroy();
+          resolve();
+        });
+      },
+    );
+    req.once('error', () => {});
+    req.setTimeout(2000, () => reject(new Error('timed out')));
+  });
+
+  const health = await fetch(serverUrl('/healthz'));
+  assert.equal(health.status, 200);
 });
