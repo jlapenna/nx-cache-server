@@ -15,8 +15,5 @@
     "test": {
       "cache": true
     }
-  },
-  "affected": {
-    "legacy": true
   }
 }
