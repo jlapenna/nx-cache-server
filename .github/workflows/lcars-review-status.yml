@@ -59,7 +59,10 @@ jobs:
                     (blocks and .submitted_at >= $base_event.createdAt and
                       ((.body // "") | contains("<!-- lcars-review:base-event ") | not))) ]
               | reduce .[] as $r ("pending";
-                  if $r.state == "CHANGES_REQUESTED" then "blocked"
+                  if $r.state == "CHANGES_REQUESTED" then
+                    if . == "blocked" or $base_event.id == null or
+                      ($r | marked("<!-- lcars-review:base-event \($base_event.id) -->"))
+                    then "blocked" else "provisional_block" end
                   elif $r.state == "COMMENTED" and . != "blocked" and
                     ($r.body // "" | split("\n") | any(rtrimstr("\r") == "<!-- lcars-review:block -->")) then "comment_blocked"
                   elif ($r.body // "" | test("<!-- attempt-claim:g[0-9]+:[^[:space:]>]+ -->")) and
@@ -67,7 +70,7 @@ jobs:
                   then "success" else . end)
             ' <<< "$reviews")
             case "$state" in
-              blocked|comment_blocked) state=pending; description="LCARS requested changes" ;;
+              blocked|provisional_block|comment_blocked) state=pending; description="LCARS requested changes" ;;
               pending) description="Awaiting LCARS code review; ask a maintainer to comment /review" ;;
               success) description="LCARS reviewed this commit" ;;
             esac

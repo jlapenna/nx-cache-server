@@ -26,7 +26,9 @@ class ReviewStatus(unittest.TestCase):
         requested = review("CHANGES_REQUESTED")
         passed = review("COMMENTED", "new", "pass")
         cases = [
-            ([approved, requested], "blocked"),
+            ([review("CHANGES_REQUESTED", submitted=base_event["createdAt"]), passed], "success"),
+            ([review("CHANGES_REQUESTED", "new"), requested, passed], "blocked"),
+            ([approved, requested], "provisional_block"),
             ([approved, review("COMMENTED", verdict="block")], "comment_blocked"),
             ([approved, review("CHANGES_REQUESTED", submitted="2026-11-01T11:59:00Z")], "success"),
             ([review("CHANGES_REQUESTED", "old"), passed], "success"),
