@@ -41,8 +41,7 @@ checkout stays clean on `main`.
 The active `Protect main` ruleset is declared in this repository's
 `infra/github-ruleset` root. Homelab supplies its trusted credentials,
 isolated backend configuration, approved execution path, and scheduled drift
-check. The ruleset requires `verify`, `validate / repository validation`,
-`LCARS review` (a maintainer can comment `/review` to request a current-commit review), and
+check. The ruleset requires `verify`, `validate / repository validation`, and
 `repository-owned Terraform`, resolved review threads, linear history, and
 disallows force-pushes or protected-branch deletion.
 
