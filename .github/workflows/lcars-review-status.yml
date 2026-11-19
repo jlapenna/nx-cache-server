@@ -9,6 +9,9 @@ on:
     workflows: ['LCARS review event']
     types: [completed]
   workflow_dispatch:
+  # Reconcile even when the PR changes its review-event workflow or a fork run awaits approval.
+  schedule:
+    - cron: "37 * * * *"
 
 permissions:
   pull-requests: read
