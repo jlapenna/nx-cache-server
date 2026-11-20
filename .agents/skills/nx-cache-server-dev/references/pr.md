@@ -2,7 +2,8 @@
 
 Create a ready PR with the change, rationale, security impact where relevant,
 and exact verification. Confirm the pushed SHA matches the PR head and that the
-required `verify`, `validate / repository validation`, and
+required `verify`, `validate / repository validation`,
+`LCARS review` (comment `/review` to request a current-commit review), and
 `repository-owned Terraform` checks were created.
 
 Repeat until the current head is complete:

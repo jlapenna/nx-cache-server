@@ -11,9 +11,11 @@ Codex and Claude sessions use the repository hook configuration in
 or `gh issue edit` are checked for the `agent-lcars-bot` issue claim and
 matching tmux title before hands-on work continues.
 
-The active GitHub `Protect main` ruleset requires the `verify` check, pull
-requests with resolved review threads, linear history, and disallows force
-pushes and branch deletion.
+Pull requests into `main` must pass `verify`, `validate / repository validation`,
+`repository-owned Terraform`, and `LCARS review`. Each new commit needs a
+fresh LCARS review. If the check is waiting, ask a maintainer to comment `/review` on the PR.
+Resolve review threads before merging. The ruleset also requires linear
+history and prevents force pushes and branch deletion.
 
 Use the Node version in [`.nvmrc`](.nvmrc), then install the locked
 development dependencies:
@@ -22,7 +24,8 @@ development dependencies:
 ./tools/setup-repo.sh
 ```
 
-Run the Nx-managed checks before opening a pull request:
+Local verification requires Python 3 and jq on your PATH for the review workflow tests.
+Run the checks before opening a pull request:
 
 ```bash
 npm run verify
