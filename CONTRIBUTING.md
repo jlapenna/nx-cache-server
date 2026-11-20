@@ -24,7 +24,8 @@ development dependencies:
 ./tools/setup-repo.sh
 ```
 
-Run the Nx-managed checks before opening a pull request:
+Local verification requires Python 3 and jq on your PATH for the review workflow tests.
+Run the checks before opening a pull request:
 
 ```bash
 npm run verify

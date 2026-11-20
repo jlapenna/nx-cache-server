@@ -63,7 +63,7 @@ Before evaluating the diff, read the PR head, base branch and latest
 If the diff was already fetched, fetch it again after recording this identity.
 Use this comparison for every review pass. Recheck all three values before
 submitting. If any changed, review the new comparison before publishing a pass.
-For a retargeted PR, include the standalone line
-`<!-- lcars-review:base-event NODE_ID -->` in the review body, substituting
+For a retargeted PR, make the first line of the review body
+`<!-- lcars-review:base-event NODE_ID -->`, substituting
 the ID recorded before reading the diff. The repository workflow uses this
 receipt to distinguish reviews of different comparisons at the same head.

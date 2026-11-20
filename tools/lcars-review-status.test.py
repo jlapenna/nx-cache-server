@@ -13,7 +13,7 @@ base_event = {"id": "new", "createdAt": "2026-11-01T12:00:00Z"}
 def review(state, event=None, verdict=None, submitted="2026-11-01T12:05:00Z", prose=""):
     lines = ["<!-- attempt-claim:g1:abc -->", prose]
     if event:
-        lines.append(f"<!-- lcars-review:base-event {event} -->")
+        lines.insert(0, f"<!-- lcars-review:base-event {event} -->")
     if verdict:
         lines.append(f"<!-- lcars-review:{verdict} -->")
     return {"user": {"login": "agent-lcars[bot]"}, "commit_id": "head",
@@ -26,7 +26,10 @@ class ReviewStatus(unittest.TestCase):
         requested = review("CHANGES_REQUESTED")
         passed = review("COMMENTED", "new", "pass")
         quotation = "The old receipt was `<!-- lcars-review:base-event old -->`."
+        fenced = "```html\n<!-- lcars-review:base-event old -->\n```"
         cases = [
+            ([approved, review("CHANGES_REQUESTED", "new", prose=fenced)], "blocked"),
+            ([approved, review("COMMENTED", "new", "block", prose=fenced)], "comment_blocked"),
             ([approved, review("CHANGES_REQUESTED", prose=quotation)], "provisional_block"),
             ([approved, review("COMMENTED", verdict="block", prose=quotation)], "comment_blocked"),
             ([review("CHANGES_REQUESTED", submitted=base_event["createdAt"]), passed], "success"),
