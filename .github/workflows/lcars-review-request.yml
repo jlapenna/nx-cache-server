@@ -1,0 +1,40 @@
+name: Request LCARS review
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, ready_for_review, synchronize, edited]
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: request-lcars-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  request:
+    if: >-
+      github.event.pull_request.draft == false &&
+      (github.event.action != 'edited' || github.event.changes.base != null)
+    runs-on: ubuntu-slim
+    timeout-minutes: 3
+    steps:
+      - name: Request review through the installed LCARS app
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          pr=$(gh api "repos/$REPO/pulls/$PR")
+          jq -e --arg head "$HEAD_SHA" '.state == "open" and .draft == false and .base.ref == "main" and .head.sha == $head' <<< "$pr" >/dev/null || exit 0
+          # Preserve an explicitly selected reviewer. Reapply the label to
+          # deliver a fresh labeled event for a new revision.
+          label=$(jq -r '[.labels[].name | select(. == "review:claude" or . == "review:codex" or . == "review:opencode" or . == "review")] | first // "review"' <<< "$pr")
+          labels="repos/$REPO/issues/$PR/labels"
+          if jq -e --arg label "$label" 'any(.labels[]; .name == $label)' <<< "$pr" >/dev/null; then
+            gh api --method DELETE "$labels/$label" --silent
+          fi
+          gh api --method POST "$labels" -f "labels[]=$label" --silent
