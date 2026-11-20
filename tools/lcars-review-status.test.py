@@ -10,8 +10,8 @@ query = workflow.read_text().split(' --arg head "$head" \x27', 1)[1].split("\x27
 base_event = {"id": "new", "createdAt": "2026-11-01T12:00:00Z"}
 
 
-def review(state, event=None, verdict=None, submitted="2026-11-01T12:05:00Z"):
-    lines = ["<!-- attempt-claim:g1:abc -->"]
+def review(state, event=None, verdict=None, submitted="2026-11-01T12:05:00Z", prose=""):
+    lines = ["<!-- attempt-claim:g1:abc -->", prose]
     if event:
         lines.append(f"<!-- lcars-review:base-event {event} -->")
     if verdict:
@@ -25,7 +25,10 @@ class ReviewStatus(unittest.TestCase):
         approved = review("APPROVED", "new")
         requested = review("CHANGES_REQUESTED")
         passed = review("COMMENTED", "new", "pass")
+        quotation = "The old receipt was `<!-- lcars-review:base-event old -->`."
         cases = [
+            ([approved, review("CHANGES_REQUESTED", prose=quotation)], "provisional_block"),
+            ([approved, review("COMMENTED", verdict="block", prose=quotation)], "comment_blocked"),
             ([review("CHANGES_REQUESTED", submitted=base_event["createdAt"]), passed], "success"),
             ([review("CHANGES_REQUESTED", "new"), requested, passed], "blocked"),
             ([approved, requested], "provisional_block"),

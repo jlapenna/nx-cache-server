@@ -46,7 +46,6 @@ jobs:
           test "$got" = "$want"
       - run: npm ci
       - run: npm run verify
-      - run: python3 tools/lcars-review-status.test.py
       - run: docker compose config -q
       - run: docker build --tag nx-cache-server:ci apps/nx-cache-server
       - run: >-

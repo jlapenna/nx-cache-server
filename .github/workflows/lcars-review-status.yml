@@ -52,15 +52,17 @@ jobs:
               }' --jq '.data.repository.pullRequest.timelineItems.nodes[0] // {}')
             state=$(jq -r --argjson base_event "$base_event" --arg head "$head" '
               def marked($marker): (.body // "" | split("\n") | any(rtrimstr("\r") == $marker));
+              def base_events: [(.body // "" | split("\n")[] | rtrimstr("\r") |
+                capture("^<!-- lcars-review:base-event (?<id>[^[:space:]<>]+) -->$").id)] | unique;
               [ .[][] | select(.user.login == "agent-lcars[bot]" and .commit_id == $head)
-                | select($base_event.id == null or marked("<!-- lcars-review:base-event \($base_event.id) -->") or
+                | select($base_event.id == null or (base_events == [$base_event.id]) or
                     (.submitted_at >= $base_event.createdAt and
-                     ((.body // "") | contains("<!-- lcars-review:base-event ") | not) and
+                     (base_events == []) and
                      (.state == "CHANGES_REQUESTED" or (.state == "COMMENTED" and marked("<!-- lcars-review:block -->"))))) ]
               | reduce .[] as $r ("pending";
                   if $r.state == "CHANGES_REQUESTED" then
                     if . == "blocked" or $base_event.id == null or
-                      ($r | marked("<!-- lcars-review:base-event \($base_event.id) -->"))
+                      ($r | (base_events == [$base_event.id]))
                     then "blocked" else "provisional_block" end
                   elif $r.state == "COMMENTED" and . != "blocked" and
                     ($r | marked("<!-- lcars-review:block -->")) then "comment_blocked"
