@@ -14,6 +14,8 @@ concurrency:
 
 jobs:
   verify:
+    # Runs `docker build` and `docker run` against a local Docker daemon, which
+    # k3s ARC runners do not expose (jlapenna/homelab#3284).
     runs-on: ubuntu-latest
     # A bounded hosted-runner gate prevents a wedged build from consuming the
     # six-hour GitHub default while allowing a cold image build to complete.
@@ -55,7 +57,7 @@ jobs:
 
   terraform:
     name: repository-owned Terraform
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'nx-cache-server-ci' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

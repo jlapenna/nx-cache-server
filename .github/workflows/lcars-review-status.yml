@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-slim
+    runs-on: [nx-cache-server-ci]
     timeout-minutes: 5
     steps:
       - name: Reconcile open PR heads
