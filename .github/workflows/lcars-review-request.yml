@@ -15,7 +15,7 @@ jobs:
       (github.event.action != 'edited' || github.event.changes.base != null)
     concurrency:
       group: request-lcars-review-${{ github.event.pull_request.number }}
-      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-slim
     timeout-minutes: 3
     steps:
