@@ -8,15 +8,14 @@ on:
 permissions:
   pull-requests: write
 
-concurrency:
-  group: request-lcars-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
-
 jobs:
   request:
     if: >-
       github.event.pull_request.draft == false &&
       (github.event.action != 'edited' || github.event.changes.base != null)
+    concurrency:
+      group: request-lcars-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-slim
     timeout-minutes: 3
     steps:
@@ -32,7 +31,7 @@ jobs:
           jq -e --arg head "$HEAD_SHA" '.state == "open" and .draft == false and .base.ref == "main" and .head.sha == $head' <<< "$pr" >/dev/null || exit 0
           # Preserve an explicitly selected reviewer. Reapply the label to
           # deliver a fresh labeled event for a new revision.
-          label=$(jq -r '[.labels[].name | select(. == "review:claude" or . == "review:codex" or . == "review:opencode" or . == "review")] | first // "review"' <<< "$pr")
+          label=$(jq -r '[.labels[].name | select(. == "review:claude" or . == "review:codex" or . == "review:opencode" or . == "review:agy" or . == "review")] | first // "review"' <<< "$pr")
           labels="repos/$REPO/issues/$PR/labels"
           if jq -e --arg label "$label" 'any(.labels[]; .name == $label)' <<< "$pr" >/dev/null; then
             gh api --method DELETE "$labels/$label" --silent
