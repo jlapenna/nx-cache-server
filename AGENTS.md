@@ -54,16 +54,3 @@ The authoritative worktree-safety guidance is the `worktree-hygiene` skill in
 the public [`jlapenna/repo-tools`](https://github.com/jlapenna/repo-tools)
 Codex plugin. Do not mirror its body locally; use its `repo-*` commands and
 follow that source in other runtimes.
-
-## LCARS pull request review configuration
-
-Before evaluating the diff, read the PR head, base branch and latest
-`BASE_REF_CHANGED_EVENT` ID from GitHub GraphQL
-(`pullRequest.timelineItems(last: 1, itemTypes: [BASE_REF_CHANGED_EVENT])`).
-If the diff was already fetched, fetch it again after recording this identity.
-Use this comparison for every review pass. Recheck all three values before
-submitting. If any changed, review the new comparison before publishing a pass.
-For a retargeted PR, make the first line of the review body
-`<!-- lcars-review:base-event NODE_ID -->`, substituting
-the ID recorded before reading the diff. The repository workflow uses this
-receipt to distinguish reviews of different comparisons at the same head.
