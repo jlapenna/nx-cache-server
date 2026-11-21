@@ -11,7 +11,7 @@ grep -Fqx '  repository  = "nx-cache-server"' "$config"
 grep -Fqx '        context = "validate / repository validation"' "$config"
 grep -Fqx '        context = "verify"' "$config"
 grep -Fqx '        context = "repository-owned Terraform"' "$config"
-grep -A1 -F 'context        = "LCARS review"' "$config" | grep -Fq 'integration_id = 15368'
+grep -A1 -F 'context        = "LCARS review (merge candidate)"' "$config" | grep -Fq 'integration_id = 4457090'
 if grep -Fq 'source = "git::https://github.com/jlapenna/homelab.git' "$config"; then
   echo "github-ruleset root must not import Homelab source" >&2
   exit 1
