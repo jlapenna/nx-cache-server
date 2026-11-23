@@ -23,6 +23,7 @@ development dependencies:
 ```bash
 ./tools/setup-repo.sh
 ```
+
 Run the checks before opening a pull request:
 
 ```bash
