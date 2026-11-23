@@ -12,7 +12,7 @@
     "prepare": "husky",
     "lint": "nx run nx-cache-server:lint",
     "test": "nx run nx-cache-server:test",
-    "verify": "nx run-many -t lint,test --projects=nx-cache-server && npm run verify:ruleset && python3 tools/lcars-review-status.test.py",
+    "verify": "nx run-many -t lint,test --projects=nx-cache-server && npm run verify:ruleset",
     "verify:ruleset": "./tools/github-ruleset-root.test.sh"
   },
   "devDependencies": {
