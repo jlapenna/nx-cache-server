@@ -11,7 +11,11 @@ grep -Fqx '  repository  = "nx-cache-server"' "$config"
 grep -Fqx '        context = "validate / repository validation"' "$config"
 grep -Fqx '        context = "verify"' "$config"
 grep -Fqx '        context = "repository-owned Terraform"' "$config"
-grep -A1 -F 'context        = "LCARS review"' "$config" | grep -Fq 'integration_id = 4457090'
+grep -Fq 'required_approving_review_count   = 1' "$config"
+if grep -Fq 'LCARS review' "$config"; then
+  echo "LCARS review must not be a required check; GitHub's approval is the gate" >&2
+  exit 1
+fi
 if grep -Fq 'source = "git::https://github.com/jlapenna/homelab.git' "$config"; then
   echo "github-ruleset root must not import Homelab source" >&2
   exit 1

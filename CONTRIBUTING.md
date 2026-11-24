@@ -12,8 +12,8 @@ or `gh issue edit` are checked for the `agent-lcars-bot` issue claim and
 matching tmux title before hands-on work continues.
 
 Pull requests into `main` must pass `verify`, `validate / repository validation`,
-`repository-owned Terraform`, and `LCARS review`. Each new commit needs a
-fresh LCARS review. If the check is waiting, ask a maintainer to comment `/review` on the PR.
+and `repository-owned Terraform`. The PR also needs one approving review of its
+current head; a new commit dismisses a stale approval. A plain comment does not count.
 Resolve review threads before merging. The ruleset also requires linear
 history and prevents force pushes and branch deletion.
 
