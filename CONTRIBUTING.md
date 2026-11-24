@@ -25,7 +25,6 @@ development dependencies:
 ./tools/setup-repo.sh
 ```
 
-Local verification requires Python 3 and jq on your PATH for the review workflow tests.
 Run the checks before opening a pull request:
 
 ```bash

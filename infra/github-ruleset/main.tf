@@ -64,7 +64,7 @@ resource "github_repository_ruleset" "protect_main" {
 
       required_check {
         context        = "LCARS review (merge candidate)"
-        integration_id = 4457090
+        integration_id = 4457090 # Agent LCARS
       }
       required_check {
         context = "validate / repository validation"
